@@ -120,21 +120,6 @@ Your CTO.new auth token might be expired. Get a fresh token from the browser.
 - Verify the channel ID is correct
 - Check that your Discord account has access to the channel
 
-## 🔒 Security Notes
-
-- Never share your `.env` file or tokens with anyone
-- Tokens can expire and may need to be refreshed
-- Keep the bot running on a trusted computer/server
-- Monitor the console output for any issues
-
-## 📞 Support
-
-If you encounter issues:
-1. Check the console output for error messages
-2. Verify your tokens are correct and haven't expired
-3. Make sure you have access to the Discord channel
-4. Ensure your internet connection is stable
-
 ## ⚖️ Legal
 
 This tool is provided as-is for educational purposes. Users are responsible for compliance with Discord's Terms of Service and any applicable laws or regulations.
