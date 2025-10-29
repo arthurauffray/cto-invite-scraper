@@ -68,7 +68,8 @@ class CTOInviteScraper {
                 console.log(`   \x1b[32m•\x1b[0m ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
             });
             console.log('🟦'.repeat(15));
-            console.log('\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m\n');
+            console.log('\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
+            console.log('\x1b[90m🛡️  Anti-obfuscation: spaces, zero-width, markdown, Unicode homoglyphs, combining marks\x1b[0m\n');
             
             // Start status display and token monitoring
             this.startStatusDisplay();
@@ -134,10 +135,47 @@ class CTOInviteScraper {
     extractInviteCodes(text) {
         if (!text) return [];
 
-        // Normalize: lower-case and remove zero-width spaces
-        const normalized = text
+        // Aggressively normalize to defeat obfuscation
+        let normalized = text
             .toLowerCase()
-            .replace(/[\u200B-\u200D\uFEFF]/g, '');
+            // Remove zero-width and invisible chars
+            .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '')
+            // Remove Discord markdown: spoilers ||text||, code `text`, bold **text**, italic *text*
+            .replace(/\|\|([^|]+)\|\|/g, '$1')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/\*([^*]+)\*/g, '$1')
+            .replace(/__([^_]+)__/g, '$1')
+            .replace(/_([^_]+)_/g, '$1')
+            .replace(/~~([^~]+)~~/g, '$1')
+            // Unicode normalize (NFD then remove combining marks, then NFC)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .normalize('NFC');
+
+        // Homoglyph/confusable mapping: common lookalike substitutions
+        const homoglyphMap = {
+            // Cyrillic lookalikes
+            'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'х': 'x', 'у': 'y',
+            // Greek lookalikes
+            'α': 'a', 'β': 'b', 'ε': 'e', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'y',
+            // Common number/letter confusables
+            'Ο': 'o', 'ο': 'o', 'О': 'o', 'о': 'o', // various O's
+            'Α': 'a', 'А': 'a', // various A's
+            'Ε': 'e', 'Е': 'e', // various E's
+            'Ι': 'i', 'І': 'i', // various I's
+            'Ν': 'n', 'Ν': 'n', // various N's
+            '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
+            '５': '5', '６': '6', '７': '7', '８': '8', '９': '9', // fullwidth digits
+            // More confusables
+            'ⅰ': 'i', 'ⅱ': 'ii', 'ⅲ': 'iii', 'ⅳ': 'iv', 'ⅴ': 'v',
+            'ℓ': 'l', 'ｌ': 'l', // fancy l's
+        };
+
+        // Apply homoglyph replacements
+        for (const [fake, real] of Object.entries(homoglyphMap)) {
+            normalized = normalized.replace(new RegExp(fake, 'g'), real);
+        }
 
         const candidates = new Set();
 
@@ -176,6 +214,13 @@ class CTOInviteScraper {
                     candidates.add(acc);
                 }
             }
+        }
+
+        // 5) Aggressive: strip ALL non-alphanumeric from entire text and scan for 12-char substrings
+        const fullyCompact = normalized.replace(/[^a-z0-9]/g, '');
+        for (let i = 0; i <= fullyCompact.length - 12; i++) {
+            const sub = fullyCompact.substring(i, i + 12);
+            if (isValidCode(sub)) candidates.add(sub);
         }
 
         return Array.from(candidates);

@@ -66,7 +66,12 @@ npm start
 - ✅ Comprehensive error handling and logging
 - ✅ Rate limiting between redemption attempts
 - ✅ Graceful shutdown handling
-- ✅ Spaced-code detection (removes spaces/zero‑width chars and reconstructs codes)
+- ✅ Advanced anti-obfuscation detection:
+  - Spaces and zero-width characters
+  - Discord markdown (spoilers, code blocks, bold, italic)
+  - Unicode normalization and combining marks
+  - Homoglyph mapping (Cyrillic, Greek, fullwidth lookalikes)
+  - Multi-strategy reconstruction (direct, spaced, line-wise, token-merge, full-scan)
 - ✅ Global metrics (installs/redeems/active) via Abacus (opt-out with ABACUS_OPTOUT=true)
 - ✅ Flexible notifications: webhook, channel ping, or DM to user
 
