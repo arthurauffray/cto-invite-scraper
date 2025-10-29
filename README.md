@@ -36,11 +36,27 @@ npm install
 6. Copy the `Bearer` token from the `Authorization` header
 
 ### 5. Configure Environment Variables
-Create a `.env` file in the project root and add your tokens:
+Create a `.env` file in the project root (copy from `.env.example`):
+   ```bash
+   cp .env.example .env
+   ```
+
+Then edit `.env` and add your tokens:
    ```
    DISCORD_TOKEN=your_discord_token_here
    CTO_AUTH_TOKEN=your_cto_auth_token_here
    ```
+
+**Channel Configuration:**
+The bot monitors these official CTO.new Discord channels by default:
+- `1428387946293362789` - invite-sharing channel
+- `1427788039144341584` - general channel  
+- `1427787585052344372` - announcements channel
+
+To monitor different channels, add to your `.env`:
+```
+CHANNEL_IDS=your_channel_id_1,your_channel_id_2,your_channel_id_3
+```
 
 **Optional:** Configure notifications (see [Notifications](#-notifications) section below)
 
@@ -64,7 +80,7 @@ npm start
 ## 🔧 How It Works
 
 1. **Connects to Discord** using your account as a selfbot
-2. **Monitors the invite-sharing channel** (ID: 1428387946293362789)
+2. **Monitors configured channels** (defaults to official CTO.new invite-sharing, general, and announcements channels)
 3. **Detects invite codes** using regex pattern matching (12-character alphanumeric codes)
 4. **Attempts redemption** via CTO.new's API
 5. **Logs all activity** to the console with detailed status updates
@@ -140,8 +156,12 @@ Press `Ctrl+C` to stop the bot gracefully.
 
 ## 🔧 Configuration
 
-You can modify these settings in `bot.js`:
-- `targetChannelId`: The Discord channel to monitor
+You can modify these settings in your `.env` file:
+- `CHANNEL_IDS`: Comma-separated list of Discord channel IDs to monitor
+- `NOTIFY_MODE`: Notification method (webhook/channel/dm/none)
+- `ABACUS_OPTOUT`: Set to `true` to disable anonymous metrics
+
+Advanced settings in `bot.js`:
 - `inviteCodePattern`: Regex pattern for detecting invite codes
 - Rate limiting delays
 - API timeout settings

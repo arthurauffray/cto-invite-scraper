@@ -5,16 +5,16 @@ const axios = require('axios');
 class CTOInviteScraper {
     constructor() {
         this.client = new Client();
-        this.targetChannelIds = [
-            '1428387946293362789', // invite-sharing channel
-            '1427788039144341584', // general channel  
-            '1427787585052344372'  // announcements channel
-        ];
-        this.channelNames = {
-            '1428387946293362789': 'Invite-sharing',
-            '1427788039144341584': 'General',
-            '1427787585052344372': 'Announcements'
-        };
+        
+        // Parse channel IDs from environment variable (comma-separated)
+        // Default to official CTO.new channels if not specified
+        const defaultChannels = '1428387946293362789,1427788039144341584,1427787585052344372';
+        const channelIdsString = process.env.CHANNEL_IDS || defaultChannels;
+        this.targetChannelIds = channelIdsString.split(',').map(id => id.trim());
+        
+        // Channel names for display (will be fetched from Discord or use generic names)
+        this.channelNames = {};
+        
         this.ctoApiUrl = 'https://api.enginelabs.ai/invites/redeem';
         this.inviteCodePattern = /\b[a-z0-9]{12}\b/gi; // Pattern matching the example codes
         this.processedCodes = new Set(); // Track already processed codes
@@ -25,7 +25,7 @@ class CTOInviteScraper {
         this.authErrorCount = 0;
         
         // Token management and retry system
-        this.tokenValid = true;
+        this.tokenValid = false; // Unknown until first health check
         this.retryQueue = [];
         this.isRetrying = false;
         this.lastTokenTest = Date.now();
@@ -57,23 +57,36 @@ class CTOInviteScraper {
     }
 
     setupEventHandlers() {
-        this.client.once('ready', () => {
+        this.client.once('ready', async () => {
             console.clear(); // Clear console for a clean start
             console.log('\n' + '🟦'.repeat(15));
             console.log('🤖 CTO.new Invite Scraper Bot v2.0');
             console.log('🟦'.repeat(15));
             console.log(`✅ Logged in as: \x1b[36m${this.client.user.tag}\x1b[0m`);
             console.log(`📡 Monitoring channels:`);
-            this.targetChannelIds.forEach(id => {
-                console.log(`   \x1b[32m•\x1b[0m ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
-            });
+            
+            // Fetch channel names from Discord
+            for (const id of this.targetChannelIds) {
+                try {
+                    const channel = await this.client.channels.fetch(id);
+                    this.channelNames[id] = channel.name || 'Unknown';
+                    console.log(`   \x1b[32m•\x1b[0m ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
+                } catch (error) {
+                    this.channelNames[id] = 'Unknown Channel';
+                    console.log(`   \x1b[32m•\x1b[0m ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m \x1b[91m[Error fetching name]\x1b[0m`);
+                }
+            }
+            
             console.log('🟦'.repeat(15));
+            
+            // Run token health check before showing ready status
+            await this.startTokenMonitoring();
+            
             console.log('\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
             console.log('\x1b[90m🛡️  Anti-obfuscation: spaces, zero-width, markdown, Unicode homoglyphs, combining marks\x1b[0m\n');
             
-            // Start status display and token monitoring
+            // Start status display
             this.startStatusDisplay();
-            this.startTokenMonitoring();
 
             // Metrics: count install and start active heartbeat
             if (this.metricsEnabled) {
@@ -448,7 +461,11 @@ class CTOInviteScraper {
         return false;
     }
 
-    startTokenMonitoring() {
+    async startTokenMonitoring() {
+        // Run immediate token health check on startup
+        this.logInfo('🧪 Running initial token health check...');
+        await this.testTokenHealth();
+        
         // Test token health every 10-15 minutes (randomized)
         setInterval(async () => {
             const randomDelay = Math.random() * 300000; // 0-5 minutes random
