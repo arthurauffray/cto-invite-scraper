@@ -33,13 +33,13 @@ class CTOInviteScraper {
         this.maxRetries = 3;
         this.retryDelay = 5000; // Start with 5 seconds
 
-        // Abacus metrics (HARD-CODED so stats aggregate across users)
-        const ABACUS_BASE = 'https://v2.jasoncameron.dev/abacus';
+        // Abacus metrics
+        const ABACUS_BASE = 'https://abacus.jasoncameron.dev';
         const ABACUS_PROJECT = 'cto-invite-scraper';
         this.metrics = {
-            installsUrl: `${ABACUS_BASE}/${ABACUS_PROJECT}/installs/increment`,
-            redeemsUrl: `${ABACUS_BASE}/${ABACUS_PROJECT}/redeems/increment`,
-            activeUrl: `${ABACUS_BASE}/${ABACUS_PROJECT}/active/increment`,
+            installsUrl: `${ABACUS_BASE}/hit/${ABACUS_PROJECT}/installs`,
+            redeemsUrl: `${ABACUS_BASE}/hit/${ABACUS_PROJECT}/redeems`,
+            activeUrl: `${ABACUS_BASE}/hit/${ABACUS_PROJECT}/active`,
         };
         // Users can opt out by setting ABACUS_OPTOUT=true
         this.metricsEnabled = process.env.ABACUS_OPTOUT !== 'true';
@@ -77,7 +77,10 @@ class CTOInviteScraper {
 
             // Metrics: count install and start active heartbeat
             if (this.metricsEnabled) {
-                this.pingMetric('installs');
+                if (this.isFirstRun) {
+                    this.pingMetric('installs');
+                    this.markAsInstalled();
+                }
                 this.startActiveHeartbeat();
             }
         });
@@ -565,10 +568,13 @@ class CTOInviteScraper {
         const url = map[kind];
         if (!url) return;
         try {
-            await axios.get(url, { timeout: 5000 });
-            this.logInfo(`📈 Metric pinged: ${kind}`);
+            const response = await axios.get(url, { timeout: 5000 });
+            // Log the count occasionally for transparency
+            if (kind === 'installs' || kind === 'redeems') {
+                this.logInfo(`📈 ${kind}: ${response.data.value}`);
+            }
         } catch (e) {
-            this.logWarning(`Metric ping failed for ${kind}`, e.message);
+            this.logError(`Metric ping failed for ${kind}`, e.message);
         }
     }
 
@@ -578,6 +584,31 @@ class CTOInviteScraper {
             this.pingMetric('active');
         }, 30 * 60 * 1000);
         this.logInfo('📡 Active heartbeat started (30m)');
+    }
+
+    markAsInstalled() {
+        // Write BOT_INSTALLED=true to .env file
+        const fs = require('fs');
+        const path = require('path');
+        const envPath = path.join(__dirname, '.env');
+        
+        try {
+            let envContent = '';
+            if (fs.existsSync(envPath)) {
+                envContent = fs.readFileSync(envPath, 'utf8');
+            }
+            
+            // Check if BOT_INSTALLED already exists
+            if (!envContent.includes('BOT_INSTALLED')) {
+                // Add to end of file
+                const newLine = envContent.endsWith('\n') ? '' : '\n';
+                envContent += `${newLine}\n# DO NOT MODIFY - Auto-generated flag to track first install\nBOT_INSTALLED=true\n`;
+                fs.writeFileSync(envPath, envContent, 'utf8');
+                this.logInfo('📝 Marked bot as installed in .env');
+            }
+        } catch (error) {
+            this.logWarning('Failed to update .env file', error.message);
+        }
     }
 
     updateStatus() {
@@ -617,6 +648,9 @@ class CTOInviteScraper {
         }
 
         this.startTime = Date.now();
+        
+        // Check if this is the first run
+        this.isFirstRun = process.env.BOT_INSTALLED !== 'true';
 
         try {
             await this.client.login(process.env.DISCORD_TOKEN);

@@ -42,7 +42,19 @@ Create a `.env` file in the project root and add your tokens:
    CTO_AUTH_TOKEN=your_cto_auth_token_here
    ```
 
-Metrics: we use Abacus to count redeemed codes for statistics. 100% anonymous.
+**Optional:** Configure notifications (see [Notifications](#-notifications) section below)
+
+**Metrics:** The bot automatically sends anonymous usage stats via [Abacus](https://abacus.jasoncameron.dev):
+- `installs`: Incremented once when bot starts
+- `redeems`: Incremented when an invite code is successfully redeemed  
+- `active`: Incremented on success and every 30 minutes (heartbeat)
+
+These metrics help track adoption and usage patterns. The data is completely anonymous (no personal info collected).
+
+To opt out of metrics, add to your `.env`:
+```
+ABACUS_OPTOUT=true
+```
 
 ### 6. Run the Bot
 ```bash
@@ -72,7 +84,7 @@ npm start
   - Unicode normalization and combining marks
   - Homoglyph mapping (Cyrillic, Greek, fullwidth lookalikes)
   - Multi-strategy reconstruction (direct, spaced, line-wise, token-merge, full-scan)
-- ✅ Global metrics (installs/redeems/active) via Abacus (opt-out with ABACUS_OPTOUT=true)
+- ✅ Anonymous usage metrics via [Abacus](https://abacus.jasoncameron.dev) (opt-out: `ABACUS_OPTOUT=true`)
 - ✅ Flexible notifications: webhook, channel ping, or DM to user
 
 ## 🔔 Notifications
