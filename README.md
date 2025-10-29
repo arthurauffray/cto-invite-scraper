@@ -36,15 +36,13 @@ npm install
 6. Copy the `Bearer` token from the `Authorization` header
 
 ### 5. Configure Environment Variables
-1. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-2. Edit `.env` and add your tokens:
+Create a `.env` file in the project root and add your tokens:
    ```
    DISCORD_TOKEN=your_discord_token_here
    CTO_AUTH_TOKEN=your_cto_auth_token_here
    ```
+
+Metrics: we use Abacus to count redeemed codes for statistics. 100% anonymous.
 
 ### 6. Run the Bot
 ```bash
@@ -68,6 +66,36 @@ npm start
 - ✅ Comprehensive error handling and logging
 - ✅ Rate limiting between redemption attempts
 - ✅ Graceful shutdown handling
+- ✅ Spaced-code detection (removes spaces/zero‑width chars and reconstructs codes)
+- ✅ Global metrics (installs/redeems/active) via Abacus (opt-out with ABACUS_OPTOUT=true)
+- ✅ Flexible notifications: webhook, channel ping, or DM to user
+
+## 🔔 Notifications
+
+Configure one of the following (choose a mode):
+
+```
+# notification mode: webhook | channel | dm | none
+NOTIFY_MODE=webhook
+
+# for webhook mode
+NOTIFY_WEBHOOK_URL=https://discord.com/api/webhooks/<id>/<token>
+# optional: ping a user in the webhook
+NOTIFY_PING_USER_ID=123456789012345678
+
+# for channel mode
+NOTIFY_MODE=channel
+NOTIFY_CHANNEL_ID=1428387946293362789
+NOTIFY_PING_USER_ID=123456789012345678
+
+# for dm mode
+NOTIFY_MODE=dm
+NOTIFY_DM_USER_ID=123456789012345678
+```
+
+Notes:
+- If DMs fail with "Cannot send messages to this user", use webhook or channel mode instead.
+- Webhook mentions use `<@USER_ID>` with allowed mentions.
 
 ## 🔍 Monitoring
 

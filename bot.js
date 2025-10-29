@@ -32,6 +32,26 @@ class CTOInviteScraper {
         this.tokenTestInterval = 5 * 60 * 1000; // Test every 5 minutes (randomized)
         this.maxRetries = 3;
         this.retryDelay = 5000; // Start with 5 seconds
+
+        // Abacus metrics (HARD-CODED so stats aggregate across users)
+        const ABACUS_BASE = 'https://v2.jasoncameron.dev/abacus';
+        const ABACUS_PROJECT = 'cto-invite-scraper';
+        this.metrics = {
+            installsUrl: `${ABACUS_BASE}/${ABACUS_PROJECT}/installs/increment`,
+            redeemsUrl: `${ABACUS_BASE}/${ABACUS_PROJECT}/redeems/increment`,
+            activeUrl: `${ABACUS_BASE}/${ABACUS_PROJECT}/active/increment`,
+        };
+        // Users can opt out by setting ABACUS_OPTOUT=true
+        this.metricsEnabled = process.env.ABACUS_OPTOUT !== 'true';
+
+        // Notification routing
+        this.notify = {
+            mode: (process.env.NOTIFY_MODE || 'none').toLowerCase(), // webhook | channel | dm | none
+            webhookUrl: process.env.NOTIFY_WEBHOOK_URL || null,
+            channelId: process.env.NOTIFY_CHANNEL_ID || null,
+            dmUserId: process.env.NOTIFY_DM_USER_ID || null,
+            pingUserId: process.env.NOTIFY_PING_USER_ID || null,
+        };
         
         this.setupEventHandlers();
     }
@@ -53,6 +73,12 @@ class CTOInviteScraper {
             // Start status display and token monitoring
             this.startStatusDisplay();
             this.startTokenMonitoring();
+
+            // Metrics: count install and start active heartbeat
+            if (this.metricsEnabled) {
+                this.pingMetric('installs');
+                this.startActiveHeartbeat();
+            }
         });
 
         this.client.on('messageCreate', async (message) => {
@@ -106,21 +132,53 @@ class CTOInviteScraper {
     }
 
     extractInviteCodes(text) {
-        const matches = text.match(this.inviteCodePattern) || [];
-        
-        // Filter out common false positives and ensure exact length match
-        return matches.filter(match => {
-            const code = match.toLowerCase();
-            // Must be exactly 12 characters (like the examples)
-            if (code.length !== 12) return false;
-            
-            // Skip obvious non-codes
-            if (code.includes('discord') || code.includes('http') || code.includes('www')) {
-                return false;
-            }
-            
-            return true;
+        if (!text) return [];
+
+        // Normalize: lower-case and remove zero-width spaces
+        const normalized = text
+            .toLowerCase()
+            .replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+        const candidates = new Set();
+
+        // Helper validator: exactly 12 chars, alphanumeric, contains both letters and digits
+        const isValidCode = (s) => /^[a-z0-9]{12}$/.test(s) && /[a-z]/.test(s) && /\d/.test(s);
+
+        // 1) Direct 12-char matches
+        (normalized.match(/\b[a-z0-9]{12}\b/g) || []).forEach(m => {
+            if (isValidCode(m)) candidates.add(m);
         });
+
+        // 2) Spaced/obfuscated groups consisting of only letters/digits and spaces
+        //    Collapse spaces and check for 12-char codes
+        (normalized.match(/[a-z0-9][a-z0-9\s]{10,40}/g) || []).forEach(seg => {
+            const compact = seg.replace(/\s+/g, '');
+            if (isValidCode(compact)) candidates.add(compact);
+        });
+
+        // 3) Line-wise check: remove non-alphanumerics per line and test
+        normalized.split(/\n+/).forEach(line => {
+            const compact = line.replace(/[^a-z0-9]/g, '');
+            if (isValidCode(compact)) candidates.add(compact);
+        });
+
+        // 4) Token merge: join adjacent alnum tokens until length >= 12, then test
+        const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
+        for (let i = 0; i < tokens.length; i++) {
+            let acc = tokens[i];
+            if (acc.length === 12 && isValidCode(acc)) {
+                candidates.add(acc);
+                continue;
+            }
+            for (let j = i + 1; j < tokens.length && acc.length < 12; j++) {
+                acc += tokens[j];
+                if (acc.length === 12 && isValidCode(acc)) {
+                    candidates.add(acc);
+                }
+            }
+        }
+
+        return Array.from(candidates);
     }
 
     async tryRedeemCodeWithRetry(inviteCode, retryCount = 0) {
@@ -186,6 +244,13 @@ class CTOInviteScraper {
             console.log('\n' + '🎊'.repeat(20));
             console.log('\x1b[92m🏆 INVITE CODE SUCCESSFULLY REDEEMED! 🏆\x1b[0m');
             console.log('🎊'.repeat(20) + '\n');
+            
+            // Metrics & success notification
+            if (this.metricsEnabled) {
+                this.pingMetric('redeems');
+                this.pingMetric('active');
+            }
+            await this.notifySuccess(inviteCode, response.data);
             
             return { success: true, shouldRetry: false };
             
@@ -271,25 +336,68 @@ class CTOInviteScraper {
     }
 
     async notifyTokenIssue() {
-        // Send a Discord DM to self about token issues
+        const msg = [
+            `🚨 **CTO Invite Bot Alert** 🚨`,
+            ``,
+            `Your CTO.new auth token appears to be expired or invalid.`,
+            `Bot will continue trying to redeem codes but may fail until token is refreshed.`,
+            ``,
+            `**To fix:**`,
+            `1. Go to cto.new and log in`,
+            `2. Open browser dev tools (F12)`,
+            `3. Try to redeem any invite code`,
+            `4. Copy the Bearer token from Network tab`,
+            `5. Update your .env file`,
+            `6. Restart the bot`,
+            ``,
+            `Timestamp: ${new Date().toLocaleString()}`
+        ].join('\n');
+        const ok = await this.sendNotification('Token issue', msg);
+        if (ok) this.logSuccess(`📱 Notification sent about token issue`);
+    }
+
+    async notifySuccess(code, data) {
+        const lines = [
+            `🎉 **Invite redeemed successfully!**`,
+            `Code: \`${code}\``,
+        ];
+        const msg = lines.join('\n');
+        await this.sendNotification('Redeem success', msg);
+    }
+
+    async sendNotification(title, content) {
+        const mode = this.notify.mode;
+        if (mode === 'none') return false;
+        const mention = this.notify.pingUserId ? `<@${this.notify.pingUserId}> ` : '';
+        const fullContent = `${mention}${content}`;
+
         try {
-            const dmChannel = await this.client.user.createDM();
-            await dmChannel.send(`🚨 **CTO Invite Bot Alert** 🚨\n\n` +
-                `Your CTO.new auth token appears to be expired or invalid.\n` +
-                `Bot will continue trying to redeem codes but may fail until token is refreshed.\n\n` +
-                `**To fix:**\n` +
-                `1. Go to cto.new and log in\n` +
-                `2. Open browser dev tools (F12)\n` +
-                `3. Try to redeem any invite code\n` +
-                `4. Copy the Bearer token from Network tab\n` +
-                `5. Update your .env file\n` +
-                `6. Restart the bot\n\n` +
-                `Timestamp: ${new Date().toLocaleString()}`);
-            
-            this.logSuccess(`📱 Discord notification sent about token issue`);
-        } catch (error) {
-            this.logError(`Failed to send Discord notification:`, error.message);
+            if (mode === 'webhook' && this.notify.webhookUrl) {
+                await axios.post(this.notify.webhookUrl, {
+                    content: fullContent,
+                    allowed_mentions: this.notify.pingUserId ? { users: [this.notify.pingUserId] } : { parse: [] }
+                }, { timeout: 5000 });
+                return true;
+            }
+            if (mode === 'channel' && this.notify.channelId) {
+                const ch = await this.client.channels.fetch(this.notify.channelId).catch(() => null);
+                if (ch && ch.isTextBased && ch.isTextBased()) {
+                    await ch.send(fullContent);
+                    return true;
+                }
+            }
+            if (mode === 'dm' && this.notify.dmUserId) {
+                const user = await this.client.users.fetch(this.notify.dmUserId).catch(() => null);
+                if (user) {
+                    const dm = await user.createDM();
+                    await dm.send(fullContent);
+                    return true;
+                }
+            }
+        } catch (e) {
+            this.logWarning('Notification send failed', e.message);
         }
+        return false;
     }
 
     startTokenMonitoring() {
@@ -400,6 +508,31 @@ class CTOInviteScraper {
         setInterval(() => {
             this.updateStatus();
         }, 30000);
+    }
+
+    // Metrics: send a GET request to pre-configured Abacus URL
+    async pingMetric(kind) {
+        const map = {
+            installs: this.metrics.installsUrl,
+            redeems: this.metrics.redeemsUrl,
+            active: this.metrics.activeUrl,
+        };
+        const url = map[kind];
+        if (!url) return;
+        try {
+            await axios.get(url, { timeout: 5000 });
+            this.logInfo(`📈 Metric pinged: ${kind}`);
+        } catch (e) {
+            this.logWarning(`Metric ping failed for ${kind}`, e.message);
+        }
+    }
+
+    startActiveHeartbeat() {
+        // Ping active every 30 minutes
+        setInterval(() => {
+            this.pingMetric('active');
+        }, 30 * 60 * 1000);
+        this.logInfo('📡 Active heartbeat started (30m)');
     }
 
     updateStatus() {
