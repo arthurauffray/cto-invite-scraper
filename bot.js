@@ -126,6 +126,9 @@ class CTOInviteScraper {
             // Start automatic token refresh FIRST (so we have a fresh token)
             await this.startTokenRefresh();
             
+            // Check if user is on the waitlist
+            await this.checkWaitlistStatus();
+            
             // Then run token health check with the fresh token
             await this.startTokenMonitoring();
             
@@ -496,16 +499,18 @@ class CTOInviteScraper {
         const msg = [
             `🚨 **CTO Invite Bot Alert** 🚨`,
             ``,
-            `Your CTO.new auth token appears to be expired or invalid.`,
-            `Bot will continue trying to redeem codes but may fail until token is refreshed.`,
+            `Your CTO.new session appears to be expired or invalid.`,
+            `The bot's auto-refresh may not be working properly.`,
             ``,
             `**To fix:**`,
-            `1. Go to cto.new and log in`,
-            `2. Open browser dev tools (F12)`,
-            `3. Try to redeem any invite code`,
-            `4. Copy the Bearer token from Network tab`,
-            `5. Update your .env file`,
+            `1. Go to https://cto.new and log in`,
+            `2. Open browser DevTools (F12) → Application tab`,
+            `3. Go to Cookies → https://cto.new`,
+            `4. Copy the \`__client\` cookie value`,
+            `5. Update \`CLERK_CLIENT_COOKIE\` in your .env file`,
             `6. Restart the bot`,
+            ``,
+            `The bot will continue trying to redeem codes in the meantime.`,
             ``,
             `Timestamp: ${new Date().toLocaleString()}`
         ].join('\n');
@@ -515,17 +520,25 @@ class CTOInviteScraper {
 
     async notifySuccess(code, data, timeToScrape) {
         const lines = [
-            `🎉 **Invite redeemed successfully!**`,
+            `� **CTO.NEW INVITE REDEEMED!** 🎊`,
+            ``,
+            `✅ You now have access to CTO.new!`,
             `Code: \`${code}\``,
         ];
         
         // Add time-to-scrape if available
         if (timeToScrape !== null && timeToScrape !== undefined) {
-            lines.push(`⚡ Scraped in: \`${(timeToScrape / 1000).toFixed(3)}s\``);
+            lines.push(`⚡ Speed: \`${(timeToScrape / 1000).toFixed(3)}s\` from post to redemption`);
         }
         
+        lines.push(``);
+        lines.push(`🎯 Visit https://cto.new to get started!`);
+        lines.push(`⭐ Don't forget to star the bot: https://github.com/arthurauffray/cto-invite-scraper`);
+        lines.push(``);
+        lines.push(`Timestamp: ${new Date().toLocaleString()}`);
+        
         const msg = lines.join('\n');
-        await this.sendNotification('Redeem success', msg);
+        await this.sendNotification('🎉 SUCCESS!', msg);
     }
 
     async sendNotification(title, content) {
@@ -618,6 +631,43 @@ class CTOInviteScraper {
         }
         
         this.lastTokenTest = Date.now();
+    }
+
+    async checkWaitlistStatus() {
+        this.logInfo('🔍 Checking your CTO.new account status...');
+        
+        try {
+            const response = await axios.get('https://api.enginelabs.ai/current-user/status', {
+                headers: {
+                    'accept': 'application/json',
+                    'authorization': `Bearer ${process.env.CTO_AUTH_TOKEN}`,
+                    'origin': 'https://cto.new',
+                    'referer': 'https://cto.new/onboarding',
+                },
+                timeout: 5000
+            });
+            
+            const status = response.data?.status;
+            
+            if (status === 'ACTIVE') {
+                console.log('\n' + '🎉'.repeat(20));
+                this.logSuccess('🎉 Congrats! You already have CTO.new access!');
+                this.logInfo('   You don\'t need this bot - you can use CTO directly.');
+                console.log('🎉'.repeat(20) + '\n');
+                this.logWarning('⚠️  Bot will continue running in case you want to monitor codes anyway...');
+                await this.sleep(3000);
+            } else if (status === 'WAITLIST') {
+                this.logSuccess('✅ Confirmed: You\'re on the waitlist');
+                this.logInfo('   Bot will watch for invite codes to help you get access!');
+            } else {
+                this.logWarning(`⚠️  Unknown status: ${status}`);
+            }
+        } catch (error) {
+            this.logWarning('⚠️  Could not verify waitlist status');
+            if (error.response) {
+                this.logWarning(`   Status: ${error.response.status}`);
+            }
+        }
     }
 
     generateFakeCode() {
