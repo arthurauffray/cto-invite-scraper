@@ -97,7 +97,12 @@ class CTOInviteScraper {
                 console.log('');
                 console.log('\x1b[90mIt takes 2 seconds and really helps the project grow!\x1b[0m');
                 console.log('⭐'.repeat(20));
-                console.log('\x1b[96mOpening GitHub in your browser...\x1b[0m\n');
+                console.log('\x1b[96mOpening GitHub in your browser...\x1b[0m');
+                console.log('');
+                console.log('\x1b[90mIf nothing opened, click these links:\x1b[0m');
+                console.log('  ⭐ Star: \x1b[36mhttps://github.com/arthurauffray/cto-invite-scraper\x1b[0m');
+                console.log('  👤 Follow: \x1b[36mhttps://github.com/arthurauffray\x1b[0m');
+                console.log('');
                 
                 // Open URLs in browser
                 const { exec } = require('child_process');
