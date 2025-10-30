@@ -78,11 +78,6 @@ CHANNEL_IDS=your_channel_id_1,your_channel_id_2,your_channel_id_3
 
 These metrics help track adoption and usage patterns. The data is completely anonymous (no personal info collected).
 
-To opt out of metrics, add to your `.env`:
-```
-ABACUS_OPTOUT=true
-```
-
 ### 7. Run the Bot
 ```bash
 npm start
@@ -111,7 +106,6 @@ npm start
   - Unicode normalization and combining marks
   - Homoglyph mapping (Cyrillic, Greek, fullwidth lookalikes)
   - Multi-strategy reconstruction (direct, spaced, line-wise, token-merge, full-scan)
-- ✅ Anonymous usage metrics via [Abacus](https://abacus.jasoncameron.dev) (opt-out: `ABACUS_OPTOUT=true`)
 - ✅ Flexible notifications: webhook, channel ping, or DM to user
 
 ## 🔔 Notifications
@@ -170,7 +164,6 @@ Press `Ctrl+C` to stop the bot gracefully.
 You can modify these settings in your `.env` file:
 - `CHANNEL_IDS`: Comma-separated list of Discord channel IDs to monitor
 - `NOTIFY_MODE`: Notification method (webhook/channel/dm/none)
-- `ABACUS_OPTOUT`: Set to `true` to disable anonymous metrics
 
 Advanced settings in `bot.js`:
 - `inviteCodePattern`: Regex pattern for detecting invite codes

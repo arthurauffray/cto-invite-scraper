@@ -12,11 +12,11 @@ class CTOInviteScraper {
         const channelIdsString = process.env.CHANNEL_IDS || defaultChannels;
         this.targetChannelIds = channelIdsString.split(',').map(id => id.trim());
         
-        // Channel names for display (will be fetched from Discord or use generic names)
+        // Channel names for display (will be fetched from Discord)
         this.channelNames = {};
         
         this.ctoApiUrl = 'https://api.enginelabs.ai/invites/redeem';
-        this.inviteCodePattern = /\b[a-z0-9]{12}\b/gi; // Pattern matching the example codes
+        this.inviteCodePattern = /\b[a-z0-9]{12}\b/gi;
         this.processedCodes = new Set(); // Track already processed codes
         this.totalProcessed = 0;
         this.successCount = 0;
@@ -47,7 +47,6 @@ class CTOInviteScraper {
             redeemsUrl: `${ABACUS_BASE}/hit/${ABACUS_PROJECT}/redeems`,
             activeUrl: `${ABACUS_BASE}/hit/${ABACUS_PROJECT}/active`,
         };
-        // Users can opt out by setting ABACUS_OPTOUT=true
         this.metricsEnabled = process.env.ABACUS_OPTOUT !== 'true';
 
         // Notification routing
@@ -84,6 +83,40 @@ class CTOInviteScraper {
             }
             
             console.log('🟦'.repeat(15));
+            
+            // Show support message on first run
+            if (this.isFirstRun) {
+                console.log('\n' + '⭐'.repeat(20));
+                console.log('\x1b[96m💙 Hey! Thanks for trying out CTO Invite Scraper! 💙\x1b[0m');
+                console.log('');
+                console.log('\x1b[93mThis took hours to build and is completely free.\x1b[0m');
+                console.log('\x1b[93mIf it helps you snag an invite, would you mind:\x1b[0m');
+                console.log('');
+                console.log('  \x1b[92m⭐ Giving it a star on GitHub?\x1b[0m');
+                console.log('  \x1b[92m👤 Following me for more cool tools?\x1b[0m');
+                console.log('');
+                console.log('\x1b[90mIt takes 2 seconds and really helps the project grow!\x1b[0m');
+                console.log('⭐'.repeat(20));
+                console.log('\x1b[96mOpening GitHub in your browser...\x1b[0m\n');
+                
+                // Open URLs in browser
+                const { exec } = require('child_process');
+                const open = (url) => {
+                    const command = process.platform === 'darwin' ? 'open' : 
+                                  process.platform === 'win32' ? 'start' : 'xdg-open';
+                    exec(`${command} ${url}`);
+                };
+                
+                // Open repo page (where they can star)
+                open('https://github.com/arthurauffray/cto-invite-scraper');
+                await this.sleep(2000);
+                
+                // Open profile page (where they can follow)
+                open('https://github.com/arthurauffray');
+                
+                // Give user 8 seconds to see the message and pages to load
+                await this.sleep(8000);
+            }
             
             // Start automatic token refresh FIRST (so we have a fresh token)
             await this.startTokenRefresh();
