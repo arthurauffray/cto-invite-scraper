@@ -151,6 +151,26 @@ class CTOInviteScraper {
     extractInviteCodes(text) {
         if (!text) return [];
 
+        // Look for explicit removal instructions like "remove the X" or "delete X"
+        const removalPatterns = [
+            /remove\s+(?:the\s+)?([^\s\w]+)/gi,
+            /delete\s+(?:the\s+)?([^\s\w]+)/gi,
+            /take\s+out\s+(?:the\s+)?([^\s\w]+)/gi,
+            /without\s+(?:the\s+)?([^\s\w]+)/gi
+        ];
+        
+        let charsToRemove = new Set();
+        for (const pattern of removalPatterns) {
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                // Extract the character(s) to remove
+                const chars = match[1];
+                for (const char of chars) {
+                    charsToRemove.add(char);
+                }
+            }
+        }
+
         // Aggressively normalize to defeat obfuscation
         let normalized = text
             .toLowerCase()
@@ -168,6 +188,12 @@ class CTOInviteScraper {
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .normalize('NFC');
+
+        // Remove explicitly mentioned characters
+        if (charsToRemove.size > 0) {
+            const removeRegex = new RegExp(`[${Array.from(charsToRemove).map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')}]`, 'gi');
+            normalized = normalized.replace(removeRegex, '');
+        }
 
         // Homoglyph/confusable mapping: common lookalike substitutions
         const homoglyphMap = {
