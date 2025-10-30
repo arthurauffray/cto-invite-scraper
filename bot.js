@@ -67,7 +67,7 @@ class CTOInviteScraper {
             console.clear(); // Clear console for a clean start
             const w = 50;
             console.log('\n╔' + '═'.repeat(w) + '╗');
-            console.log('║  🤖 CTO.new Invite Scraper Bot v2.1' + ' '.repeat(13) + '║');
+            console.log('║  🤖 CTO.new Invite Scraper Bot v2.1' + ' '.repeat(14) + '║');
             console.log('╚' + '═'.repeat(w) + '╝');
             console.log(`✅ Logged in as: \x1b[36m${this.client.user.tag}\x1b[0m`);
             console.log(`📡 Monitoring channels:`);
@@ -88,13 +88,13 @@ class CTOInviteScraper {
             if (this.isFirstRun) {
                 const w = 50;
                 console.log('\n┌' + '─'.repeat(w) + '┐');
-                console.log('│ 💙 Thanks for trying CTO Invite Scraper! 💙' + ' '.repeat(4) + '│');
+                console.log('│ 💙 Thanks for trying CTO Invite Scraper! 💙' + ' '.repeat(6) + '│');
                 console.log('│' + ' '.repeat(w) + '│');
                 console.log('│ This took hours to build and is free.' + ' '.repeat(12) + '│');
                 console.log('│ If it helps you, please consider:' + ' '.repeat(16) + '│');
                 console.log('│' + ' '.repeat(w) + '│');
                 console.log('│   ⭐ Star on GitHub' + ' '.repeat(30) + '│');
-                console.log('│   👤 Follow for more tools' + ' '.repeat(22) + '│');
+                console.log('│   👤 Follow for more tools' + ' '.repeat(23) + '│');
                 console.log('│' + ' '.repeat(w) + '│');
                 console.log('│ It takes 2 seconds and helps the project!' + ' '.repeat(8) + '│');
                 console.log('└' + '─'.repeat(w) + '┘');
@@ -954,10 +954,10 @@ class CTOInviteScraper {
         console.log('│' + line1 + ' '.repeat(w - line1.length - 1) + '│');
         
         const line2 = ` 🔢 Processed: ${this.totalProcessed} | ✅ Success: ${this.successCount}`;
-        console.log('│' + line2 + ' '.repeat(Math.max(0, w - line2.length - 4)) + '\x1b[92m' + ' '.repeat(4) + '\x1b[0m│');
+        console.log('│' + line2 + ' '.repeat(Math.max(0, w - line2.length - 5)) + '\x1b[92m' + ' '.repeat(4) + '\x1b[0m│');
         
         const line3 = ` ⚠️  Redeemed: ${this.alreadyRedeemedCount} | ❌ Invalid: ${this.invalidCount}`;
-        console.log('│' + line3 + ' '.repeat(w - line3.length - 3) + '│');
+        console.log('│' + line3 + ' '.repeat(w - line3.length) + '│');
         
         // Only show retry queue if non-zero
         if (this.retryQueue.length > 0 || this.authErrorCount > 0) {
@@ -968,7 +968,7 @@ class CTOInviteScraper {
         const tokenEmoji = this.tokenValid ? '✅' : '❌';
         const timeSinceTest = Math.floor((Date.now() - this.lastTokenTest) / 60000);
         const line5 = ` 🏥 Token: ${tokenEmoji} | 🧪 Last test: ${timeSinceTest}m ago`;
-        console.log('│' + line5 + ' '.repeat(w - line5.length - 3) + '│');
+        console.log('│' + line5 + ' '.repeat(w - line5.length - 1) + '│');
         console.log('└' + '─'.repeat(w) + '┘\n');
     }
 
