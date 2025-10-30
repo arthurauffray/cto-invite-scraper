@@ -29,9 +29,15 @@ class CTOInviteScraper {
         this.retryQueue = [];
         this.isRetrying = false;
         this.lastTokenTest = Date.now();
-        this.tokenTestInterval = 5 * 60 * 1000; // Test every 5 minutes (randomized)
+        this.tokenTestInterval = 1 * 60 * 1000; // Test every 1 minutes (randomized)
         this.maxRetries = 3;
         this.retryDelay = 5000; // Start with 5 seconds
+        
+        // CTO token refresh (Clerk session management)
+        this.clerkSessionId = null;
+        this.clerkSessionUrl = null;
+        this.lastTokenRefresh = Date.now();
+        this.tokenRefreshInterval = 15 * 1000; // Refresh every 15 seconds
 
         // Abacus metrics
         const ABACUS_BASE = 'https://abacus.jasoncameron.dev';
@@ -81,6 +87,9 @@ class CTOInviteScraper {
             
             // Run token health check before showing ready status
             await this.startTokenMonitoring();
+            
+            // Start automatic token refresh
+            await this.startTokenRefresh();
             
             console.log('\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
             console.log('\x1b[90m🛡️  Anti-obfuscation: spaces, zero-width, markdown, Unicode homoglyphs, combining marks\x1b[0m\n');
@@ -581,6 +590,76 @@ class CTOInviteScraper {
             result += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return result;
+    }
+
+    extractClerkSessionId(jwt) {
+        // Decode JWT to extract session ID (sid claim)
+        try {
+            const parts = jwt.split('.');
+            if (parts.length !== 3) return null;
+            
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+            return payload.sid || null;
+        } catch (error) {
+            this.logWarning('Failed to decode JWT:', error.message);
+            return null;
+        }
+    }
+
+    async startTokenRefresh() {
+        // Extract session ID from current token
+        const sessionId = this.extractClerkSessionId(process.env.CTO_AUTH_TOKEN);
+        
+        if (!sessionId) {
+            this.logWarning('⚠️  Could not extract Clerk session ID from token. Token refresh disabled.');
+            return;
+        }
+        
+        this.clerkSessionId = sessionId;
+        this.clerkSessionUrl = `https://clerk.cto.new/v1/client/sessions/${sessionId}/touch?__clerk_api_version=2025-04-10&_clerk_js_version=5.103.1`;
+        
+        this.logInfo(`🔄 Token auto-refresh enabled (every ${this.tokenRefreshInterval/1000}s)`);
+        
+        // Refresh token immediately
+        await this.refreshCTOToken();
+        
+        // Set up periodic refresh
+        setInterval(async () => {
+            await this.refreshCTOToken();
+        }, this.tokenRefreshInterval);
+    }
+
+    async refreshCTOToken() {
+        if (!this.clerkSessionUrl) return;
+        
+        try {
+            const response = await axios.post(this.clerkSessionUrl, 'active_organization_id=', {
+                headers: {
+                    'accept': '*/*',
+                    'content-type': 'application/x-www-form-urlencoded',
+                    'origin': 'https://cto.new',
+                    'referer': 'https://cto.new/onboarding',
+                },
+                timeout: 5000
+            });
+            
+            const newToken = response.data?.response?.last_active_token?.jwt;
+            
+            if (newToken) {
+                // Update the token in process.env
+                process.env.CTO_AUTH_TOKEN = newToken;
+                this.lastTokenRefresh = Date.now();
+                this.logInfo(`🔄 Token refreshed successfully \x1b[90m(expires in ~60s)\x1b[0m`);
+                this.tokenValid = true;
+            } else {
+                this.logWarning('⚠️  Token refresh returned no new JWT');
+            }
+        } catch (error) {
+            this.logError('❌ Token refresh failed:', error.message);
+            if (error.response) {
+                this.logError(`   Status: ${error.response.status}`);
+            }
+        }
     }
 
     sleep(ms) {
