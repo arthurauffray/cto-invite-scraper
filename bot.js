@@ -470,14 +470,6 @@ class CTOInviteScraper {
                     this.logInfo(`   This code may be fake, expired, or incorrectly formatted`);
                     this.invalidCount++;
                     return { success: false, shouldRetry: false };
-                } else if (status === 422) {
-                    this.logWarning(`⚠️  Code \x1b[93m${inviteCode}\x1b[0m failed validation${timeToScrapeDisplay}`);
-                    this.logInfo(`   This code format is invalid or contains invalid data`);
-                    if (data.error) {
-                        this.logInfo(`   Details: ${data.error}`);
-                    }
-                    this.invalidCount++;
-                    return { success: false, shouldRetry: false };
                 } else {
                     this.logError(`❌ Failed to redeem \x1b[93m${inviteCode}\x1b[0m: ${status}${timeToScrapeDisplay}`, JSON.stringify(data, null, 2));
                     return { success: false, shouldRetry: false };
