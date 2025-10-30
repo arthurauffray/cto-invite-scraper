@@ -122,6 +122,11 @@ class CTOInviteScraper {
                 await this.sleep(8000);
             }
             
+            // Print Abacus stats if debug mode is on
+            if (this.metricsEnabled && process.env.DEBUG_MODE === 'true') {
+                await this.printAbacusStats();
+            }
+
             // Start automatic token refresh FIRST (so we have a fresh token)
             await this.startTokenRefresh();
             
@@ -399,107 +404,35 @@ class CTOInviteScraper {
             
             // Metrics & success notification
             if (this.metricsEnabled) {
-                this.client.once('ready', async () => {
-                    console.clear(); // Clear console for a clean start
-                    const w = 50;
-                    console.log('\n╔' + '═'.repeat(w) + '╗');
-                    console.log('║  🤖 CTO.new Invite Scraper Bot v2.1' + ' '.repeat(14) + '║');
-                    console.log('╚' + '═'.repeat(w) + '╝');
-                    console.log(`✅ Logged in as: \x1b[36m${this.client.user.tag}\x1b[0m`);
-                    console.log(`📡 Monitoring channels:`);
-                    // Fetch channel names from Discord
-                    for (const id of this.targetChannelIds) {
-                        try {
-                            const channel = await this.client.channels.fetch(id);
-                            this.channelNames[id] = channel.name || 'Unknown';
-                            console.log(`   • ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
-                        } catch (error) {
-                            this.channelNames[id] = 'Unknown Channel';
-                            console.log(`   • ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m \x1b[91m[Error]\x1b[0m`);
-                        }
-                    }
-
-                    // Show support message on first run
-                    if (this.isFirstRun) {
-                        const w = 50;
-                        console.log('\n┌' + '─'.repeat(w) + '┐');
-                        console.log('│ 💙 Thanks for trying CTO Invite Scraper! 💙' + ' '.repeat(6) + '│');
-                        console.log('│' + ' '.repeat(w) + '│');
-                        console.log('│ This took hours to build and is free.' + ' '.repeat(12) + '│');
-                        console.log('│ If it helps you, please consider:' + ' '.repeat(16) + '│');
-                        console.log('│' + ' '.repeat(w) + '│');
-                        console.log('│   ⭐ Star on GitHub' + ' '.repeat(30) + '│');
-                        console.log('│   👤 Follow for more tools' + ' '.repeat(23) + '│');
-                        console.log('│' + ' '.repeat(w) + '│');
-                        console.log('│ It takes 2 seconds and helps the project!' + ' '.repeat(8) + '│');
-                        console.log('└' + '─'.repeat(w) + '┘');
-                        console.log('\x1b[90m⭐ https://github.com/arthurauffray/cto-invite-scraper\x1b[0m');
-                        console.log('\x1b[90m� https://github.com/arthurauffray\x1b[0m');
-                        console.log('');
-                        // Open URLs in browser
-                        const { exec } = require('child_process');
-                        const open = (url) => {
-                            const command = process.platform === 'darwin' ? 'open' : 
-                                          process.platform === 'win32' ? 'start' : 'xdg-open';
-                            exec(`${command} ${url}`);
-                        };
-                        // Open repo page (where they can star)
-                        open('https://github.com/arthurauffray/cto-invite-scraper');
-                        await this.sleep(2000);
-                        // Open profile page (where they can follow)
-                        open('https://github.com/arthurauffray');
-                        await this.sleep(8000);
-                    }
-
-                    // Print Abacus stats if debug mode is on
-                    await this.printAbacusStats();
-
-                    // Start automatic token refresh FIRST (so we have a fresh token)
-                    await this.startTokenRefresh();
-
-                    // Check if user is on the waitlist (with retry)
-                    await this.checkWaitlistStatus();
-
-                    // Then run token health check with the fresh token
-                    await this.startTokenMonitoring();
-
-                    console.log('\n\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
-                    console.log('\x1b[90m🛡️  Anti-obfuscation enabled\x1b[0m\n');
-
-                    // Start status display
-                    this.startStatusDisplay();
-
-                    // Metrics: count install and start active heartbeat
-                    if (this.metricsEnabled) {
-                        if (this.isFirstRun) {
-                            this.pingMetric('installs');
-                            this.markAsInstalled();
-                        }
-                        this.startActiveHeartbeat();
-                    }
-                });
-    // Print Abacus statistics on startup if debug mode is enabled
-    async printAbacusStats() {
-        if (!this.metricsEnabled || process.env.DEBUG_MODE !== 'true') return;
-        this.logInfo('📊 Fetching Abacus statistics...');
-        const kinds = ['installs', 'redeems', 'active'];
-        for (const kind of kinds) {
-            try {
-                const url = this.metrics[`${kind}Url`];
-                const response = await axios.get(url, { timeout: 5000 });
-                this.logInfo(`📈 ${kind}: ${response.data.value}`);
-            } catch (e) {
-                this.logWarning(`Abacus metric fetch failed for ${kind}`, e.message);
+                try {
+                    this.pingMetric('redeems');
+                } catch (e) {
+                    if (process.env.DEBUG_MODE === 'true') this.logWarning('Failed to ping redeems metric', e.message);
+                }
             }
-        }
-    }
-                        this.logInfo(`   Respecting Retry-After header: ${retrySeconds}s`);
-                        await this.sleep(retrySeconds * 1000);
-                    } else {
-                        // Otherwise use exponential backoff on retry
-                        this.logInfo(`   Using exponential backoff on retry`);
-                    }
-                    
+
+            // Send success notification
+            try {
+                await this.notifySuccess(inviteCode, response.data, timeToScrape);
+            } catch (e) {
+                this.logWarning('Failed to send success notification', e.message);
+            }
+
+            return { success: true, shouldRetry: false, data: response.data, timeToScrape };
+        } catch (error) {
+            if (error.response) {
+                const status = error.response.status;
+                const data = error.response.data || {};
+                // Handle specific API responses
+                if (status === 400 && data.error && data.error.includes('Only waitlisted users')) {
+                    // User already has access - no longer on waitlist
+                    this.logInfo("║ You're no longer on the waitlist.");
+                    return { success: false, shouldRetry: false };
+                } else if (status === 429) {
+                    // Rate limited: respect Retry-After header if present
+                    const retrySeconds = parseInt(error.response.headers['retry-after']) || 5;
+                    this.logInfo(`   Respecting Retry-After header: ${retrySeconds}s`);
+                    await this.sleep(retrySeconds * 1000);
                     return { success: false, shouldRetry: true };
                 } else if (status === 404) {
                     this.logWarning(`🔍 Code \x1b[93m${inviteCode}\x1b[0m is invalid or doesn't exist${timeToScrapeDisplay}`);
@@ -966,6 +899,22 @@ class CTOInviteScraper {
         } catch (e) {
             if (process.env.DEBUG_MODE === 'true') {
                 this.logError(`Metric ping failed for ${kind}`, e.message);
+            }
+        }
+    }
+
+    // Fetch and print all Abacus statistics (debug-only)
+    async printAbacusStats() {
+        if (!this.metricsEnabled || process.env.DEBUG_MODE !== 'true') return;
+        this.logInfo('📊 Fetching Abacus statistics...');
+        const kinds = ['installs', 'redeems', 'active'];
+        for (const kind of kinds) {
+            try {
+                const url = this.metrics[`${kind}Url`];
+                const resp = await axios.get(url, { timeout: 5000 });
+                this.logInfo(`📈 ${kind}: ${resp.data.value}`);
+            } catch (e) {
+                this.logWarning(`Failed to fetch Abacus metric ${kind}`, e.message);
             }
         }
     }
