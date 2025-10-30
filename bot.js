@@ -85,11 +85,11 @@ class CTOInviteScraper {
             
             console.log('🟦'.repeat(15));
             
-            // Run token health check before showing ready status
-            await this.startTokenMonitoring();
-            
-            // Start automatic token refresh
+            // Start automatic token refresh FIRST (so we have a fresh token)
             await this.startTokenRefresh();
+            
+            // Then run token health check with the fresh token
+            await this.startTokenMonitoring();
             
             console.log('\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
             console.log('\x1b[90m🛡️  Anti-obfuscation: spaces, zero-width, markdown, Unicode homoglyphs, combining marks\x1b[0m\n');
@@ -611,18 +611,13 @@ class CTOInviteScraper {
         const sessionId = this.extractClerkSessionId(process.env.CTO_AUTH_TOKEN);
         
         if (!sessionId) {
-            this.logWarning('⚠️  Could not extract Clerk session ID from token. Token refresh disabled.');
-            return;
+            this.logError('❌ Could not extract Clerk session ID from token.');
+            this.logError('   Your CTO_AUTH_TOKEN may be invalid or malformed.');
+            process.exit(1);
         }
         
         this.clerkSessionId = sessionId;
         this.clerkSessionUrl = `https://clerk.cto.new/v1/client/sessions/${sessionId}/touch?__clerk_api_version=2025-04-10&_clerk_js_version=5.103.1`;
-        
-        // Check if we have the required cookie
-        if (!process.env.CLERK_CLIENT_COOKIE) {
-            this.logInfo(`ℹ️  Token auto-refresh unavailable (requires CLERK_CLIENT_COOKIE). Token valid for ~60s.`);
-            return;
-        }
         
         this.logInfo(`🔄 Token auto-refresh enabled (every ${this.tokenRefreshInterval/1000}s)`);
         
@@ -638,13 +633,7 @@ class CTOInviteScraper {
     async refreshCTOToken() {
         if (!this.clerkSessionUrl) return;
         
-        // Check if we have the __client cookie (needed for Clerk authentication)
         const clerkClientCookie = process.env.CLERK_CLIENT_COOKIE;
-        if (!clerkClientCookie) {
-            // Token refresh requires Clerk cookies which we don't have
-            // Fall back to using the token until it expires
-            return;
-        }
         
         try {
             const response = await axios.post(this.clerkSessionUrl, 'active_organization_id=', {
@@ -664,22 +653,18 @@ class CTOInviteScraper {
                 // Update the token in process.env
                 process.env.CTO_AUTH_TOKEN = newToken;
                 this.lastTokenRefresh = Date.now();
-                this.logSuccess(`🔄 Token refreshed successfully \x1b[90m(expires in ~60s)\x1b[0m`);
+                this.logSuccess(`🔄 Token refreshed \x1b[90m(expires in ~60s)\x1b[0m`);
                 this.tokenValid = true;
             } else {
                 this.logWarning('⚠️  Token refresh returned no new JWT');
             }
         } catch (error) {
-            // Silently fail token refresh - it's an optional optimization
-            // The token will work until it expires naturally
-            if (error.response?.status === 401) {
-                this.logWarning('⚠️  Token auto-refresh unavailable (needs CLERK_CLIENT_COOKIE). Token will expire after ~60s.');
-                // Disable future refresh attempts
-                this.clerkSessionUrl = null;
-            } else {
-                this.logError('❌ Token refresh failed:', error.message);
-                if (error.response) {
-                    this.logError(`   Status: ${error.response.status}`);
+            this.logError('❌ Token refresh failed:', error.message);
+            if (error.response) {
+                this.logError(`   Status: ${error.response.status}`);
+                if (error.response.status === 401) {
+                    this.logError('   Your CLERK_CLIENT_COOKIE may be invalid or expired.');
+                    this.logError('   Please get a fresh cookie from https://cto.new');
                 }
             }
         }
@@ -818,6 +803,18 @@ class CTOInviteScraper {
         if (!process.env.CTO_AUTH_TOKEN) {
             console.error('❌ CTO_AUTH_TOKEN not found in environment variables');
             console.error('Please set your CTO.new auth token in the .env file');
+            process.exit(1);
+        }
+
+        if (!process.env.CLERK_CLIENT_COOKIE) {
+            console.error('❌ CLERK_CLIENT_COOKIE not found in environment variables');
+            console.error('Please set your Clerk client cookie in the .env file');
+            console.error('');
+            console.error('To get this:');
+            console.error('1. Open https://cto.new in your browser');
+            console.error('2. Press F12 → Application tab → Cookies → https://cto.new');
+            console.error('3. Copy the __client cookie value');
+            console.error('4. Add to .env: CLERK_CLIENT_COOKIE=<value>');
             process.exit(1);
         }
 

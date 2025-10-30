@@ -35,24 +35,27 @@ npm install
 5. Look for the request to `api.enginelabs.ai/invites/redeem`
 6. Copy the `Bearer` token from the `Authorization` header
 
-**Optional: Enable Auto-Refresh (Recommended)**
-To keep the token fresh automatically:
-1. In DevTools, go to `Application` tab → `Cookies` → `https://cto.new`
-2. Find the `__client` cookie and copy its value
-3. Add to your `.env`: `CLERK_CLIENT_COOKIE=<value>`
+### 5. Get Your Clerk Client Cookie (REQUIRED)
+The auth token expires after ~60 seconds, so the bot needs this cookie to refresh it automatically:
 
-Without this, the token expires after ~60 seconds. With it, the bot refreshes automatically every 15 seconds!
+1. With DevTools still open, go to `Application` tab
+2. Expand `Cookies` → click on `https://cto.new`
+3. Find the `__client` cookie and copy its full value (it's a long JWT string)
+4. Add to your `.env`: `CLERK_CLIENT_COOKIE=<value>`
 
-### 5. Configure Environment Variables
+The bot will automatically refresh your auth token every 15 seconds using this cookie!
+
+### 6. Configure Environment Variables
 Create a `.env` file in the project root (copy from `.env.example`):
    ```bash
    cp .env.example .env
    ```
 
-Then edit `.env` and add your tokens:
+Then edit `.env` and add your tokens and cookie:
    ```
    DISCORD_TOKEN=your_discord_token_here
    CTO_AUTH_TOKEN=your_cto_auth_token_here
+   CLERK_CLIENT_COOKIE=your_clerk_client_cookie_here
    ```
 
 **Channel Configuration:**
@@ -80,7 +83,7 @@ To opt out of metrics, add to your `.env`:
 ABACUS_OPTOUT=true
 ```
 
-### 6. Run the Bot
+### 7. Run the Bot
 ```bash
 npm start
 ```
