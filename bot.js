@@ -399,85 +399,100 @@ class CTOInviteScraper {
             
             // Metrics & success notification
             if (this.metricsEnabled) {
-                this.pingMetric('redeems');
-                this.pingMetric('active');
-            }
-            await this.notifySuccess(inviteCode, response.data, timeToScrape);
-            
-            // Shutdown bot after successful redemption
-            this.logInfo('🛑 Shutting down bot after successful redemption...');
-            setTimeout(() => {
-                this.client.destroy();
-                process.exit(0);
-            }, 2000); // 2 second delay to allow notification to send
-            
-            return { success: true, shouldRetry: false };
-            
-        } catch (error) {
-            // Format time-to-scrape display for errors
-            const timeToScrapeDisplay = timeToScrape !== null 
-                ? ` \x1b[90m(attempt in ${(timeToScrape / 1000).toFixed(3)}s)\x1b[0m`
-                : '';
-            
-            if (error.response) {
-                const status = error.response.status;
-                const data = error.response.data;
-                
-                if (status === 400 && data.error && data.error.includes('already been redeemed')) {
-                    this.logWarning(`⚠️  Code \x1b[93m${inviteCode}\x1b[0m already redeemed${timeToScrapeDisplay}`);
-                    this.alreadyRedeemedCount++;
-                    
-                    // Notify about already redeemed codes
-                    await this.notifyAlreadyRedeemed(inviteCode, timeToScrape);
-                    
-                    return { success: false, shouldRetry: false };
-                } else if (status === 400 && data.error && data.error.includes('Only waitlisted users')) {
-                    // User already has access - no longer on waitlist
+                this.client.once('ready', async () => {
+                    console.clear(); // Clear console for a clean start
                     const w = 50;
                     console.log('\n╔' + '═'.repeat(w) + '╗');
-                    console.log('║ 🎉 Congrats! You already have access! 🎉' + ' '.repeat(6) + '║');
-                    console.log('║' + ' '.repeat(w) + '║');
-                    console.log('║ You\'re no longer on the waitlist.' + ' '.repeat(15) + '║');
-                    console.log('║ Visit https://cto.new to start using it!' + ' '.repeat(8) + '║');
-                    console.log('╚' + '═'.repeat(w) + '╝\n');
-                    
-                    this.logInfo('🛑 Shutting down bot - you don\'t need it anymore!');
-                    
-                    setTimeout(() => {
-                        this.client.destroy();
-                        process.exit(0);
-                    }, 3000);
-                    
-                    return { success: false, shouldRetry: false };
-                } else if (status === 401 || status === 403) {
-                    // Auth errors - mark token as potentially invalid and suggest retry
-                    this.tokenValid = false;
-                    this.authErrorCount++;
-                    
-                    if (status === 401) {
-                        this.logError(`🔐 Authentication failed for code \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
-                    } else {
-                        this.logError(`🚫 Access forbidden for code \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
+                    console.log('║  🤖 CTO.new Invite Scraper Bot v2.1' + ' '.repeat(14) + '║');
+                    console.log('╚' + '═'.repeat(w) + '╝');
+                    console.log(`✅ Logged in as: \x1b[36m${this.client.user.tag}\x1b[0m`);
+                    console.log(`📡 Monitoring channels:`);
+                    // Fetch channel names from Discord
+                    for (const id of this.targetChannelIds) {
+                        try {
+                            const channel = await this.client.channels.fetch(id);
+                            this.channelNames[id] = channel.name || 'Unknown';
+                            console.log(`   • ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
+                        } catch (error) {
+                            this.channelNames[id] = 'Unknown Channel';
+                            console.log(`   • ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m \x1b[91m[Error]\x1b[0m`);
+                        }
                     }
-                    
-                    this.logError(`💡 Token may be expired. Will retry and notify if needed.`);
-                    
-                    // Send Discord notification about token issues
-                    await this.notifyTokenIssue();
-                    
-                    return { success: false, shouldRetry: true };
-                } else if (status === 429) {
-                    // Rate limit error - extract retry-after header if available
-                    const retryAfter = error.response.headers['retry-after'];
-                    const retrySeconds = retryAfter ? parseInt(retryAfter) : 60;
-                    
-                    this.rateLimitCount++;
-                    
-                    this.logWarning(`⏱️  Rate limited for code \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
-                    this.logWarning(`   API requests are being throttled. Will retry after ${retrySeconds}s`);
-                    
-                    // If we have a retry-after header, wait that amount before retrying
-                    if (retryAfter) {
+
+                    // Show support message on first run
+                    if (this.isFirstRun) {
+                        const w = 50;
+                        console.log('\n┌' + '─'.repeat(w) + '┐');
+                        console.log('│ 💙 Thanks for trying CTO Invite Scraper! 💙' + ' '.repeat(6) + '│');
+                        console.log('│' + ' '.repeat(w) + '│');
+                        console.log('│ This took hours to build and is free.' + ' '.repeat(12) + '│');
+                        console.log('│ If it helps you, please consider:' + ' '.repeat(16) + '│');
+                        console.log('│' + ' '.repeat(w) + '│');
+                        console.log('│   ⭐ Star on GitHub' + ' '.repeat(30) + '│');
+                        console.log('│   👤 Follow for more tools' + ' '.repeat(23) + '│');
+                        console.log('│' + ' '.repeat(w) + '│');
+                        console.log('│ It takes 2 seconds and helps the project!' + ' '.repeat(8) + '│');
+                        console.log('└' + '─'.repeat(w) + '┘');
+                        console.log('\x1b[90m⭐ https://github.com/arthurauffray/cto-invite-scraper\x1b[0m');
+                        console.log('\x1b[90m� https://github.com/arthurauffray\x1b[0m');
+                        console.log('');
+                        // Open URLs in browser
+                        const { exec } = require('child_process');
+                        const open = (url) => {
+                            const command = process.platform === 'darwin' ? 'open' : 
+                                          process.platform === 'win32' ? 'start' : 'xdg-open';
+                            exec(`${command} ${url}`);
+                        };
+                        // Open repo page (where they can star)
+                        open('https://github.com/arthurauffray/cto-invite-scraper');
+                        await this.sleep(2000);
+                        // Open profile page (where they can follow)
+                        open('https://github.com/arthurauffray');
+                        await this.sleep(8000);
+                    }
+
+                    // Print Abacus stats if debug mode is on
+                    await this.printAbacusStats();
+
+                    // Start automatic token refresh FIRST (so we have a fresh token)
+                    await this.startTokenRefresh();
+
+                    // Check if user is on the waitlist (with retry)
+                    await this.checkWaitlistStatus();
+
+                    // Then run token health check with the fresh token
+                    await this.startTokenMonitoring();
+
+                    console.log('\n\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
+                    console.log('\x1b[90m🛡️  Anti-obfuscation enabled\x1b[0m\n');
+
+                    // Start status display
+                    this.startStatusDisplay();
+
+                    // Metrics: count install and start active heartbeat
+                    if (this.metricsEnabled) {
+                        if (this.isFirstRun) {
+                            this.pingMetric('installs');
+                            this.markAsInstalled();
+                        }
+                        this.startActiveHeartbeat();
+                    }
+                });
+    // Print Abacus statistics on startup if debug mode is enabled
+    async printAbacusStats() {
+        if (!this.metricsEnabled || process.env.DEBUG_MODE !== 'true') return;
+        this.logInfo('📊 Fetching Abacus statistics...');
+        const kinds = ['installs', 'redeems', 'active'];
+        for (const kind of kinds) {
+            try {
+                const url = this.metrics[`${kind}Url`];
+                const response = await axios.get(url, { timeout: 5000 });
+                this.logInfo(`📈 ${kind}: ${response.data.value}`);
+            } catch (e) {
+                this.logWarning(`Abacus metric fetch failed for ${kind}`, e.message);
+            }
+        }
+    }
                         this.logInfo(`   Respecting Retry-After header: ${retrySeconds}s`);
                         await this.sleep(retrySeconds * 1000);
                     } else {
@@ -709,51 +724,69 @@ class CTOInviteScraper {
     async checkWaitlistStatus() {
         this.logInfo('🔍 Checking your CTO.new account status...');
         
-        try {
-            const reqUrl = 'https://api.enginelabs.ai/current-user/status';
-            const reqHeaders = {
-                'accept': 'application/json',
-                'authorization': `Bearer ${process.env.CTO_AUTH_TOKEN}`,
-                'origin': 'https://cto.new',
-                'referer': 'https://cto.new/onboarding',
-            };
-            const response = await axios.get(reqUrl, {
-                headers: reqHeaders,
-                timeout: 5000
-            });
-
-            const status = response.data?.status;
-
-            if (status === 'ACTIVE') {
-                const w = 50;
-                console.log('\n╔' + '═'.repeat(w) + '╗');
-                console.log('║ 🎉 You already have CTO.new access! 🎉' + ' '.repeat(9) + '║');
-                console.log('║ Bot will monitor codes anyway if you want.' + ' '.repeat(7) + '║');
-                console.log('╚' + '═'.repeat(w) + '╝\n');
-                await this.sleep(2000);
-            } else if (status === 'WAITLIST') {
-                this.logSuccess('✅ You\'re on the waitlist - watching for codes!');
-            } else {
-                this.logWarning(`⚠️  Unknown status: ${status}`);
+        // Sonnet 4.5: retry logic with exponential backoff
+        const maxAttempts = 3;
+        let attempt = 0;
+        let lastError = null;
+        while (attempt < maxAttempts) {
+            try {
+                const reqUrl = 'https://api.enginelabs.ai/current-user/status';
+                const reqHeaders = {
+                    'accept': 'application/json',
+                    'authorization': `Bearer ${process.env.CTO_AUTH_TOKEN}`,
+                    'origin': 'https://cto.new',
+                    'referer': 'https://cto.new/onboarding',
+                };
+                const response = await axios.get(reqUrl, {
+                    headers: reqHeaders,
+                    timeout: 5000
+                });
+                const status = response.data?.status;
+                if (status === 'ACTIVE') {
+                    const w = 50;
+                    console.log('\n╔' + '═'.repeat(w) + '╗');
+                    console.log('║ 🎉 You already have CTO.new access! 🎉' + ' '.repeat(9) + '║');
+                    console.log('║ Bot will monitor codes anyway if you want.' + ' '.repeat(7) + '║');
+                    console.log('╚' + '═'.repeat(w) + '╝\n');
+                    await this.sleep(2000);
+                } else if (status === 'WAITLIST') {
+                    this.logSuccess('✅ You\'re on the waitlist - watching for codes!');
+                } else {
+                    this.logWarning(`⚠️  Unknown status: ${status}`);
+                }
+                return;
+            } catch (error) {
+                lastError = error;
+                this.logWarning(`⚠️  Could not verify waitlist status (attempt ${attempt + 1}/${maxAttempts})`);
+                if (error.response) {
+                    this.logWarning(`   Status: ${error.response.status}`);
+                    if (process.env.DEBUG_MODE === 'true') {
+                        this.logWarning('   Response data:', JSON.stringify(error.response.data));
+                        this.logWarning('   Request headers:', JSON.stringify(error.response.config?.headers));
+                    }
+                } else if (error.request) {
+                    if (process.env.DEBUG_MODE === 'true') {
+                        this.logWarning('   No response received from server.');
+                        this.logWarning('   Request config:', JSON.stringify(error.config));
+                    }
+                } else {
+                    if (process.env.DEBUG_MODE === 'true') {
+                        this.logWarning('   Error message:', error.message);
+                    }
+                }
+                attempt++;
+                if (attempt < maxAttempts) {
+                    // Exponential backoff: 2^attempt * 1s
+                    const delay = Math.pow(2, attempt) * 1000;
+                    this.logInfo(`⏳ Retrying waitlist check in ${(delay / 1000).toFixed(1)}s...`);
+                    await this.sleep(delay);
+                }
             }
-        } catch (error) {
-            this.logWarning('⚠️  Could not verify waitlist status');
-            if (error.response) {
-                this.logWarning(`   Status: ${error.response.status}`);
-                if (process.env.DEBUG_MODE === 'true') {
-                    this.logWarning('   Response data:', JSON.stringify(error.response.data));
-                    this.logWarning('   Request headers:', JSON.stringify(error.response.config?.headers));
-                }
-            } else if (error.request) {
-                if (process.env.DEBUG_MODE === 'true') {
-                    this.logWarning('   No response received from server.');
-                    this.logWarning('   Request config:', JSON.stringify(error.config));
-                }
-            } else {
-                if (process.env.DEBUG_MODE === 'true') {
-                    this.logWarning('   Error message:', error.message);
-                }
-            }
+        }
+        // If we get here, all attempts failed
+        this.logError('❌ All attempts to verify waitlist status failed.');
+        if (lastError && process.env.DEBUG_MODE === 'true') {
+            this.logError('   Last error:', lastError.message);
         }
     }
 
