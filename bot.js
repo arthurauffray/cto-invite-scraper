@@ -710,18 +710,20 @@ class CTOInviteScraper {
         this.logInfo('🔍 Checking your CTO.new account status...');
         
         try {
-            const response = await axios.get('https://api.enginelabs.ai/current-user/status', {
-                headers: {
-                    'accept': 'application/json',
-                    'authorization': `Bearer ${process.env.CTO_AUTH_TOKEN}`,
-                    'origin': 'https://cto.new',
-                    'referer': 'https://cto.new/onboarding',
-                },
+            const reqUrl = 'https://api.enginelabs.ai/current-user/status';
+            const reqHeaders = {
+                'accept': 'application/json',
+                'authorization': `Bearer ${process.env.CTO_AUTH_TOKEN}`,
+                'origin': 'https://cto.new',
+                'referer': 'https://cto.new/onboarding',
+            };
+            const response = await axios.get(reqUrl, {
+                headers: reqHeaders,
                 timeout: 5000
             });
-            
+
             const status = response.data?.status;
-            
+
             if (status === 'ACTIVE') {
                 const w = 50;
                 console.log('\n╔' + '═'.repeat(w) + '╗');
@@ -738,6 +740,19 @@ class CTOInviteScraper {
             this.logWarning('⚠️  Could not verify waitlist status');
             if (error.response) {
                 this.logWarning(`   Status: ${error.response.status}`);
+                if (process.env.DEBUG_MODE === 'true') {
+                    this.logWarning('   Response data:', JSON.stringify(error.response.data));
+                    this.logWarning('   Request headers:', JSON.stringify(error.response.config?.headers));
+                }
+            } else if (error.request) {
+                if (process.env.DEBUG_MODE === 'true') {
+                    this.logWarning('   No response received from server.');
+                    this.logWarning('   Request config:', JSON.stringify(error.config));
+                }
+            } else {
+                if (process.env.DEBUG_MODE === 'true') {
+                    this.logWarning('   Error message:', error.message);
+                }
             }
         }
     }
