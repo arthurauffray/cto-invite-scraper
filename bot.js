@@ -131,10 +131,10 @@ class CTOInviteScraper {
 
         this.logSuccess(`🎯 Found ${inviteCodes.length} potential invite code(s):`, `\x1b[93m${inviteCodes.join(', ')}\x1b[0m`);
 
-        // Try to redeem each code
+        // Try to redeem each code (pass message timestamp for time-to-scrape calculation)
         for (const code of inviteCodes) {
             if (!this.processedCodes.has(code)) {
-                await this.tryRedeemCodeWithRetry(code);
+                await this.tryRedeemCodeWithRetry(code, message.createdTimestamp);
                 this.processedCodes.add(code);
                 this.totalProcessed++;
                 
@@ -242,8 +242,8 @@ class CTOInviteScraper {
         return Array.from(candidates);
     }
 
-    async tryRedeemCodeWithRetry(inviteCode, retryCount = 0) {
-        const result = await this.tryRedeemCode(inviteCode);
+    async tryRedeemCodeWithRetry(inviteCode, messageTimestamp, retryCount = 0) {
+        const result = await this.tryRedeemCode(inviteCode, messageTimestamp);
         
         // If auth error and we haven't exceeded max retries
         if (result.shouldRetry && retryCount < this.maxRetries) {
@@ -254,7 +254,8 @@ class CTOInviteScraper {
                 this.retryQueue.push({
                     code: inviteCode,
                     retryCount: retryCount + 1,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    messageTimestamp: messageTimestamp
                 });
             }
             
@@ -267,8 +268,12 @@ class CTOInviteScraper {
         return result;
     }
 
-    async tryRedeemCode(inviteCode) {
+    async tryRedeemCode(inviteCode, messageTimestamp) {
         this.logInfo(`🔄 Attempting to redeem code: \x1b[93m${inviteCode}\x1b[0m`);
+        
+        // Calculate time-to-scrape: time from message sent to request sent
+        const requestSentTime = Date.now();
+        const timeToScrape = messageTimestamp ? requestSentTime - messageTimestamp : null;
         
         try {
             const response = await axios.post(this.ctoApiUrl, {
@@ -296,7 +301,12 @@ class CTOInviteScraper {
                 timeout: 10000 // 10 second timeout
             });
 
-            this.logSuccess(`🎉 SUCCESS! Code \x1b[92m${inviteCode}\x1b[0m redeemed successfully!`);
+            // Format time-to-scrape display
+            const timeToScrapeDisplay = timeToScrape !== null 
+                ? ` \x1b[90m(scraped in ${(timeToScrape / 1000).toFixed(3)}s)\x1b[0m`
+                : '';
+            
+            this.logSuccess(`🎉 SUCCESS! Code \x1b[92m${inviteCode}\x1b[0m redeemed successfully!${timeToScrapeDisplay}`);
             this.logInfo(`📋 Response:`, JSON.stringify(response.data, null, 2));
             this.successCount++;
             this.tokenValid = true; // Token is working
@@ -304,6 +314,9 @@ class CTOInviteScraper {
             // Show celebration
             console.log('\n' + '🎊'.repeat(20));
             console.log('\x1b[92m🏆 INVITE CODE SUCCESSFULLY REDEEMED! 🏆\x1b[0m');
+            if (timeToScrape !== null) {
+                console.log(`⚡ Time to scrape: \x1b[96m${(timeToScrape / 1000).toFixed(3)}s\x1b[0m`);
+            }
             console.log('🎊'.repeat(20) + '\n');
             
             // Metrics & success notification
@@ -311,20 +324,29 @@ class CTOInviteScraper {
                 this.pingMetric('redeems');
                 this.pingMetric('active');
             }
-            await this.notifySuccess(inviteCode, response.data);
+            await this.notifySuccess(inviteCode, response.data, timeToScrape);
+            
+            // Shutdown bot after successful redemption
+            this.logInfo('🛑 Shutting down bot after successful redemption...');
+            setTimeout(() => {
+                this.client.destroy();
+                process.exit(0);
+            }, 2000); // 2 second delay to allow notification to send
             
             return { success: true, shouldRetry: false };
             
-            // You might want to stop the bot after successful redemption
-            // this.client.destroy();
-            
         } catch (error) {
+            // Format time-to-scrape display for errors
+            const timeToScrapeDisplay = timeToScrape !== null 
+                ? ` \x1b[90m(attempt in ${(timeToScrape / 1000).toFixed(3)}s)\x1b[0m`
+                : '';
+            
             if (error.response) {
                 const status = error.response.status;
                 const data = error.response.data;
                 
                 if (status === 400 && data.error && data.error.includes('already been redeemed')) {
-                    this.logWarning(`⚠️  Code \x1b[93m${inviteCode}\x1b[0m already redeemed`);
+                    this.logWarning(`⚠️  Code \x1b[93m${inviteCode}\x1b[0m already redeemed${timeToScrapeDisplay}`);
                     this.alreadyRedeemedCount++;
                     return { success: false, shouldRetry: false };
                 } else if (status === 401 || status === 403) {
@@ -333,9 +355,9 @@ class CTOInviteScraper {
                     this.authErrorCount++;
                     
                     if (status === 401) {
-                        this.logError(`🔐 Authentication failed for code \x1b[93m${inviteCode}\x1b[0m`);
+                        this.logError(`🔐 Authentication failed for code \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
                     } else {
-                        this.logError(`🚫 Access forbidden for code \x1b[93m${inviteCode}\x1b[0m`);
+                        this.logError(`🚫 Access forbidden for code \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
                     }
                     
                     this.logError(`💡 Token may be expired. Will retry and notify if needed.`);
@@ -345,19 +367,19 @@ class CTOInviteScraper {
                     
                     return { success: false, shouldRetry: true };
                 } else if (status === 404) {
-                    this.logWarning(`🔍 Code \x1b[93m${inviteCode}\x1b[0m is invalid or doesn't exist`);
+                    this.logWarning(`🔍 Code \x1b[93m${inviteCode}\x1b[0m is invalid or doesn't exist${timeToScrapeDisplay}`);
                     this.logInfo(`   This code may be fake, expired, or incorrectly formatted`);
                     this.invalidCount++;
                     return { success: false, shouldRetry: false };
                 } else {
-                    this.logError(`❌ Failed to redeem \x1b[93m${inviteCode}\x1b[0m: ${status}`, JSON.stringify(data, null, 2));
+                    this.logError(`❌ Failed to redeem \x1b[93m${inviteCode}\x1b[0m: ${status}${timeToScrapeDisplay}`, JSON.stringify(data, null, 2));
                     return { success: false, shouldRetry: false };
                 }
             } else if (error.code === 'ECONNABORTED') {
-                this.logError(`⏰ Timeout attempting to redeem \x1b[93m${inviteCode}\x1b[0m`);
+                this.logError(`⏰ Timeout attempting to redeem \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
                 return { success: false, shouldRetry: true }; // Retry timeouts
             } else {
-                this.logError(`🌐 Network error redeeming \x1b[93m${inviteCode}\x1b[0m:`, error.message);
+                this.logError(`🌐 Network error redeeming \x1b[93m${inviteCode}\x1b[0m:${timeToScrapeDisplay}`, error.message);
                 return { success: false, shouldRetry: true }; // Retry network errors
             }
         }
@@ -378,14 +400,15 @@ class CTOInviteScraper {
             const retryItem = this.retryQueue.shift();
             this.logInfo(`🔄 Retrying code: \x1b[93m${retryItem.code}\x1b[0m (attempt ${retryItem.retryCount}/${this.maxRetries})`);
             
-            const result = await this.tryRedeemCode(retryItem.code);
+            const result = await this.tryRedeemCode(retryItem.code, retryItem.messageTimestamp);
             
             // If still failing and we have retries left, add back to queue
             if (result.shouldRetry && retryItem.retryCount < this.maxRetries) {
                 this.retryQueue.push({
                     code: retryItem.code,
                     retryCount: retryItem.retryCount + 1,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    messageTimestamp: retryItem.messageTimestamp
                 });
             } else if (result.shouldRetry) {
                 this.logError(`❌ Max retries exceeded for code \x1b[93m${retryItem.code}\x1b[0m`);
@@ -417,11 +440,17 @@ class CTOInviteScraper {
         if (ok) this.logSuccess(`📱 Notification sent about token issue`);
     }
 
-    async notifySuccess(code, data) {
+    async notifySuccess(code, data, timeToScrape) {
         const lines = [
             `🎉 **Invite redeemed successfully!**`,
             `Code: \`${code}\``,
         ];
+        
+        // Add time-to-scrape if available
+        if (timeToScrape !== null && timeToScrape !== undefined) {
+            lines.push(`⚡ Scraped in: \`${(timeToScrape / 1000).toFixed(3)}s\``);
+        }
+        
         const msg = lines.join('\n');
         await this.sendNotification('Redeem success', msg);
     }
