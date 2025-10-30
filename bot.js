@@ -23,6 +23,7 @@ class CTOInviteScraper {
         this.invalidCount = 0;
         this.alreadyRedeemedCount = 0;
         this.authErrorCount = 0;
+        this.rateLimitCount = 0;
         
         // Token management and retry system
         this.tokenValid = false; // Unknown until first health check
@@ -463,6 +464,26 @@ class CTOInviteScraper {
                     
                     // Send Discord notification about token issues
                     await this.notifyTokenIssue();
+                    
+                    return { success: false, shouldRetry: true };
+                } else if (status === 429) {
+                    // Rate limit error - extract retry-after header if available
+                    const retryAfter = error.response.headers['retry-after'];
+                    const retrySeconds = retryAfter ? parseInt(retryAfter) : 60;
+                    
+                    this.rateLimitCount++;
+                    
+                    this.logWarning(`⏱️  Rate limited for code \x1b[93m${inviteCode}\x1b[0m${timeToScrapeDisplay}`);
+                    this.logWarning(`   API requests are being throttled. Will retry after ${retrySeconds}s`);
+                    
+                    // If we have a retry-after header, wait that amount before retrying
+                    if (retryAfter) {
+                        this.logInfo(`   Respecting Retry-After header: ${retrySeconds}s`);
+                        await this.sleep(retrySeconds * 1000);
+                    } else {
+                        // Otherwise use exponential backoff on retry
+                        this.logInfo(`   Using exponential backoff on retry`);
+                    }
                     
                     return { success: false, shouldRetry: true };
                 } else if (status === 404) {
@@ -960,9 +981,14 @@ class CTOInviteScraper {
         console.log('│' + line3 + ' '.repeat(w - line3.length) + '│');
         
         // Only show retry queue if non-zero
-        if (this.retryQueue.length > 0 || this.authErrorCount > 0) {
+        if (this.retryQueue.length > 0 || this.authErrorCount > 0 || this.rateLimitCount > 0) {
             const line4 = ` 🔄 Retry queue: ${this.retryQueue.length} | 🔐 Auth errors: ${this.authErrorCount}`;
             console.log('│' + line4 + ' '.repeat(w - line4.length - 2) + '│');
+            
+            if (this.rateLimitCount > 0) {
+                const line5 = ` ⏱️  Rate limits: ${this.rateLimitCount}`;
+                console.log('│' + line5 + ' '.repeat(w - line5.length - 1) + '│');
+            }
         }
         
         const tokenEmoji = this.tokenValid ? '✅' : '❌';
