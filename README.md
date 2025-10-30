@@ -1,5 +1,11 @@
 # CTO.new Invite Scraper Bot
 
+[![GitHub Stars](https://img.shields.io/github/stars/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=yellow)](https://github.com/arthurauffray/cto-invite-scraper/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=blue)](https://github.com/arthurauffray/cto-invite-scraper/network/members)
+[![GitHub Issues](https://img.shields.io/github/issues/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=red)](https://github.com/arthurauffray/cto-invite-scraper/issues)
+[![GitHub Watchers](https://img.shields.io/github/watchers/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=green)](https://github.com/arthurauffray/cto-invite-scraper/watchers)
+[![License](https://img.shields.io/github/license/arthurauffray/cto-invite-scraper?style=for-the-badge&color=purple)](LICENSE)
+
 A Discord selfbot that monitors the CTO.new invite sharing channel and automatically attempts to redeem invite codes when they're posted.
 
 ## ⚠️ Important Disclaimers
@@ -106,9 +112,19 @@ npm start
   - Unicode normalization and combining marks
   - Homoglyph mapping (Cyrillic, Greek, fullwidth lookalikes)
   - Multi-strategy reconstruction (direct, spaced, line-wise, token-merge, full-scan)
-- ✅ Flexible notifications: webhook, channel ping, or DM to user
+- ✅ Flexible notifications:
+  - Success: When you successfully redeem a code
+  - Already Redeemed: When you find a code but someone beat you to it
+  - Token Issues: When your auth token needs attention
+  - Delivery methods: webhook, channel ping, or DM to user
+- ✅ Clean console output with optional debug mode
 
 ## 🔔 Notifications
+
+The bot can notify you about important events:
+- ✅ **Success**: Code redeemed successfully
+- ⚠️ **Already Redeemed**: Found a code but someone got it first
+- 🔐 **Token Issues**: Auth token needs attention
 
 Configure one of the following (choose a mode):
 
@@ -164,6 +180,7 @@ Press `Ctrl+C` to stop the bot gracefully.
 You can modify these settings in your `.env` file:
 - `CHANNEL_IDS`: Comma-separated list of Discord channel IDs to monitor
 - `NOTIFY_MODE`: Notification method (webhook/channel/dm/none)
+- `DEBUG_MODE`: Set to `true` for verbose logging (token refreshes, health checks, metrics)
 
 Advanced settings in `bot.js`:
 - `inviteCodePattern`: Regex pattern for detecting invite codes
@@ -188,6 +205,10 @@ Your CTO.new auth token might be expired. Get a fresh token from the browser.
 - Make sure you're in the correct Discord server
 - Verify the channel ID is correct
 - Check that your Discord account has access to the channel
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=arthurauffray/cto-invite-scraper&type=date&legend=top-left)](https://www.star-history.com/#arthurauffray/cto-invite-scraper&type=date&legend=top-left)
 
 ## ⚖️ Legal
 

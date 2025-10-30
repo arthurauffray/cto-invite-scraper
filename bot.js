@@ -38,6 +38,7 @@ class CTOInviteScraper {
         this.clerkSessionUrl = null;
         this.lastTokenRefresh = Date.now();
         this.tokenRefreshInterval = 15 * 1000; // Refresh every 15 seconds
+        this.isRefreshingToken = false; // Prevent concurrent refreshes
 
         // Abacus metrics
         const ABACUS_BASE = 'https://abacus.jasoncameron.dev';
@@ -64,9 +65,9 @@ class CTOInviteScraper {
     setupEventHandlers() {
         this.client.once('ready', async () => {
             console.clear(); // Clear console for a clean start
-            console.log('\n' + '🟦'.repeat(15));
-            console.log('🤖 CTO.new Invite Scraper Bot v2.0');
-            console.log('🟦'.repeat(15));
+            console.log('\n╔════════════════════════════════════════════════╗');
+            console.log('║    🤖 CTO.new Invite Scraper Bot v2.1        ║');
+            console.log('╚════════════════════════════════════════════════╝');
             console.log(`✅ Logged in as: \x1b[36m${this.client.user.tag}\x1b[0m`);
             console.log(`📡 Monitoring channels:`);
             
@@ -75,33 +76,28 @@ class CTOInviteScraper {
                 try {
                     const channel = await this.client.channels.fetch(id);
                     this.channelNames[id] = channel.name || 'Unknown';
-                    console.log(`   \x1b[32m•\x1b[0m ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
+                    console.log(`   • ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m`);
                 } catch (error) {
                     this.channelNames[id] = 'Unknown Channel';
-                    console.log(`   \x1b[32m•\x1b[0m ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m \x1b[91m[Error fetching name]\x1b[0m`);
+                    console.log(`   • ${this.channelNames[id]} \x1b[90m(${id})\x1b[0m \x1b[91m[Error]\x1b[0m`);
                 }
             }
             
-            console.log('🟦'.repeat(15));
-            
             // Show support message on first run
             if (this.isFirstRun) {
-                console.log('\n' + '⭐'.repeat(20));
-                console.log('\x1b[96m💙 Hey! Thanks for trying out CTO Invite Scraper! 💙\x1b[0m');
-                console.log('');
-                console.log('\x1b[93mThis took hours to build and is completely free.\x1b[0m');
-                console.log('\x1b[93mIf it helps you snag an invite, would you mind:\x1b[0m');
-                console.log('');
-                console.log('  \x1b[92m⭐ Giving it a star on GitHub?\x1b[0m');
-                console.log('  \x1b[92m👤 Following me for more cool tools?\x1b[0m');
-                console.log('');
-                console.log('\x1b[90mIt takes 2 seconds and really helps the project grow!\x1b[0m');
-                console.log('⭐'.repeat(20));
-                console.log('\x1b[96mOpening GitHub in your browser...\x1b[0m');
-                console.log('');
-                console.log('\x1b[90mIf nothing opened, click these links:\x1b[0m');
-                console.log('  ⭐ Star: \x1b[36mhttps://github.com/arthurauffray/cto-invite-scraper\x1b[0m');
-                console.log('  👤 Follow: \x1b[36mhttps://github.com/arthurauffray\x1b[0m');
+                console.log('\n┌────────────────────────────────────────────────┐');
+                console.log('│  💙 Thanks for trying CTO Invite Scraper! 💙  │');
+                console.log('│                                                │');
+                console.log('│  This took hours to build and is free.         │');
+                console.log('│  If it helps you, please consider:            │');
+                console.log('│                                                │');
+                console.log('│    ⭐ Star on GitHub                           │');
+                console.log('│    👤 Follow for more tools                    │');
+                console.log('│                                                │');
+                console.log('│  It takes 2 seconds and helps the project!    │');
+                console.log('└────────────────────────────────────────────────┘');
+                console.log('\x1b[90m⭐ https://github.com/arthurauffray/cto-invite-scraper\x1b[0m');
+                console.log('\x1b[90m👤 https://github.com/arthurauffray\x1b[0m');
                 console.log('');
                 
                 // Open URLs in browser
@@ -132,8 +128,8 @@ class CTOInviteScraper {
             // Then run token health check with the fresh token
             await this.startTokenMonitoring();
             
-            console.log('\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
-            console.log('\x1b[90m🛡️  Anti-obfuscation: spaces, zero-width, markdown, Unicode homoglyphs, combining marks\x1b[0m\n');
+            console.log('\n\x1b[92m🎯 Bot is ready and watching for invite codes...\x1b[0m');
+            console.log('\x1b[90m🛡️  Anti-obfuscation enabled\x1b[0m\n');
             
             // Start status display
             this.startStatusDisplay();
@@ -383,17 +379,18 @@ class CTOInviteScraper {
                 : '';
             
             this.logSuccess(`🎉 SUCCESS! Code \x1b[92m${inviteCode}\x1b[0m redeemed successfully!${timeToScrapeDisplay}`);
-            this.logInfo(`📋 Response:`, JSON.stringify(response.data, null, 2));
             this.successCount++;
             this.tokenValid = true; // Token is working
             
             // Show celebration
-            console.log('\n' + '🎊'.repeat(20));
-            console.log('\x1b[92m🏆 INVITE CODE SUCCESSFULLY REDEEMED! 🏆\x1b[0m');
+            console.log('\n╔════════════════════════════════════════════════╗');
+            console.log('║      🏆 INVITE CODE REDEEMED! 🏆              ║');
             if (timeToScrape !== null) {
-                console.log(`⚡ Time to scrape: \x1b[96m${(timeToScrape / 1000).toFixed(3)}s\x1b[0m`);
+                const timeStr = `${(timeToScrape / 1000).toFixed(3)}s`;
+                const padding = 48 - 23 - timeStr.length; // 48 total width, 23 for text + emoji
+                console.log(`║      ⚡ Scrape speed: ${timeStr}${' '.repeat(padding)}║`);
             }
-            console.log('🎊'.repeat(20) + '\n');
+            console.log('╚════════════════════════════════════════════════╝\n');
             
             // Metrics & success notification
             if (this.metricsEnabled) {
@@ -424,6 +421,27 @@ class CTOInviteScraper {
                 if (status === 400 && data.error && data.error.includes('already been redeemed')) {
                     this.logWarning(`⚠️  Code \x1b[93m${inviteCode}\x1b[0m already redeemed${timeToScrapeDisplay}`);
                     this.alreadyRedeemedCount++;
+                    
+                    // Notify about already redeemed codes
+                    await this.notifyAlreadyRedeemed(inviteCode, timeToScrape);
+                    
+                    return { success: false, shouldRetry: false };
+                } else if (status === 400 && data.error && data.error.includes('Only waitlisted users')) {
+                    // User already has access - no longer on waitlist
+                    console.log('\n╔════════════════════════════════════════════════╗');
+                    console.log('║   🎉 Congrats! You already have access! 🎉   ║');
+                    console.log('║                                                ║');
+                    console.log('║   You\'re no longer on the waitlist.            ║');
+                    console.log('║   Visit https://cto.new to start using it!    ║');
+                    console.log('╚════════════════════════════════════════════════╝\n');
+                    
+                    this.logInfo('🛑 Shutting down bot - you don\'t need it anymore!');
+                    
+                    setTimeout(() => {
+                        this.client.destroy();
+                        process.exit(0);
+                    }, 3000);
+                    
                     return { success: false, shouldRetry: false };
                 } else if (status === 401 || status === 403) {
                     // Auth errors - mark token as potentially invalid and suggest retry
@@ -541,6 +559,28 @@ class CTOInviteScraper {
         await this.sendNotification('🎉 SUCCESS!', msg);
     }
 
+    async notifyAlreadyRedeemed(code, timeToScrape) {
+        const lines = [
+            `⚠️ **Code Already Redeemed** ⚠️`,
+            ``,
+            `The bot found code \`${code}\` but someone else got it first.`,
+        ];
+        
+        // Add time-to-scrape if available
+        if (timeToScrape !== null && timeToScrape !== undefined) {
+            lines.push(`⏱️ Scrape speed: \`${(timeToScrape / 1000).toFixed(3)}s\``);
+            lines.push(`You were fast, but someone was faster!`);
+        }
+        
+        lines.push(``);
+        lines.push(`Keep watching - another code might appear soon!`);
+        lines.push(``);
+        lines.push(`Timestamp: ${new Date().toLocaleString()}`);
+        
+        const msg = lines.join('\n');
+        await this.sendNotification('⚠️ Already Redeemed', msg);
+    }
+
     async sendNotification(title, content) {
         const mode = this.notify.mode;
         if (mode === 'none') return false;
@@ -578,7 +618,9 @@ class CTOInviteScraper {
 
     async startTokenMonitoring() {
         // Run immediate token health check on startup
-        this.logInfo('🧪 Running initial token health check...');
+        if (process.env.DEBUG_MODE === 'true') {
+            this.logInfo('🧪 Running initial token health check...');
+        }
         await this.testTokenHealth();
         
         // Test token health every 10-15 minutes (randomized)
@@ -587,14 +629,15 @@ class CTOInviteScraper {
             await this.sleep(randomDelay);
             await this.testTokenHealth();
         }, this.tokenTestInterval);
-        
-        this.logInfo(`🔍 Token monitoring started (testing every ~${this.tokenTestInterval/60000} minutes)`);
     }
 
     async testTokenHealth() {
         // Generate a random fake invite code to test the API
         const testCode = this.generateFakeCode();
-        this.logInfo(`🧪 Testing token health with fake code: \x1b[90m${testCode}\x1b[0m`);
+        
+        if (process.env.DEBUG_MODE === 'true') {
+            this.logInfo(`🧪 Testing token health with fake code: \x1b[90m${testCode}\x1b[0m`);
+        }
         
         try {
             await axios.post(this.ctoApiUrl, {
@@ -619,10 +662,14 @@ class CTOInviteScraper {
                     await this.notifyTokenIssue();
                 } else if (status === 404) {
                     // Expected for fake code - token is working
-                    this.logSuccess(`✅ Token health check passed (404 as expected)`);
+                    if (process.env.DEBUG_MODE === 'true') {
+                        this.logSuccess(`✅ Token health check passed`);
+                    }
                     this.tokenValid = true;
                 } else {
-                    this.logInfo(`🔍 Token test got status ${status} - likely working`);
+                    if (process.env.DEBUG_MODE === 'true') {
+                        this.logInfo(`🔍 Token test got status ${status} - likely working`);
+                    }
                     this.tokenValid = true;
                 }
             } else {
@@ -650,15 +697,13 @@ class CTOInviteScraper {
             const status = response.data?.status;
             
             if (status === 'ACTIVE') {
-                console.log('\n' + '🎉'.repeat(20));
-                this.logSuccess('🎉 Congrats! You already have CTO.new access!');
-                this.logInfo('   You don\'t need this bot - you can use CTO directly.');
-                console.log('🎉'.repeat(20) + '\n');
-                this.logWarning('⚠️  Bot will continue running in case you want to monitor codes anyway...');
-                await this.sleep(3000);
+                console.log('\n╔════════════════════════════════════════════════╗');
+                console.log('║   🎉 You already have CTO.new access! 🎉     ║');
+                console.log('║   Bot will monitor codes anyway if you want.  ║');
+                console.log('╚════════════════════════════════════════════════╝\n');
+                await this.sleep(2000);
             } else if (status === 'WAITLIST') {
-                this.logSuccess('✅ Confirmed: You\'re on the waitlist');
-                this.logInfo('   Bot will watch for invite codes to help you get access!');
+                this.logSuccess('✅ You\'re on the waitlist - watching for codes!');
             } else {
                 this.logWarning(`⚠️  Unknown status: ${status}`);
             }
@@ -707,7 +752,9 @@ class CTOInviteScraper {
         this.clerkSessionId = sessionId;
         this.clerkSessionUrl = `https://clerk.cto.new/v1/client/sessions/${sessionId}/touch?__clerk_api_version=2025-04-10&_clerk_js_version=5.103.1`;
         
-        this.logInfo(`🔄 Token auto-refresh enabled (every ${this.tokenRefreshInterval/1000}s)`);
+        if (process.env.DEBUG_MODE === 'true') {
+            this.logInfo(`🔄 Token auto-refresh enabled (every ${this.tokenRefreshInterval/1000}s)`);
+        }
         
         // Refresh token immediately
         await this.refreshCTOToken();
@@ -720,6 +767,13 @@ class CTOInviteScraper {
 
     async refreshCTOToken() {
         if (!this.clerkSessionUrl) return;
+        
+        // Prevent concurrent refreshes
+        if (this.isRefreshingToken) {
+            return;
+        }
+        
+        this.isRefreshingToken = true;
         
         const clerkClientCookie = process.env.CLERK_CLIENT_COOKIE;
         
@@ -741,7 +795,10 @@ class CTOInviteScraper {
                 // Update the token in process.env
                 process.env.CTO_AUTH_TOKEN = newToken;
                 this.lastTokenRefresh = Date.now();
-                this.logSuccess(`🔄 Token refreshed \x1b[90m(expires in ~60s)\x1b[0m`);
+                // More subtle token refresh message
+                if (process.env.DEBUG_MODE === 'true') {
+                    this.logInfo(`\x1b[90m🔄 Token refreshed\x1b[0m`);
+                }
                 this.tokenValid = true;
             } else {
                 this.logWarning('⚠️  Token refresh returned no new JWT');
@@ -755,6 +812,8 @@ class CTOInviteScraper {
                     this.logError('   Please get a fresh cookie from https://cto.new');
                 }
             }
+        } finally {
+            this.isRefreshingToken = false;
         }
     }
 
@@ -816,12 +875,14 @@ class CTOInviteScraper {
         if (!url) return;
         try {
             const response = await axios.get(url, { timeout: 5000 });
-            // Log the count occasionally for transparency
-            if (kind === 'installs' || kind === 'redeems') {
+            // Only log in debug mode
+            if ((kind === 'installs' || kind === 'redeems') && process.env.DEBUG_MODE === 'true') {
                 this.logInfo(`📈 ${kind}: ${response.data.value}`);
             }
         } catch (e) {
-            this.logError(`Metric ping failed for ${kind}`, e.message);
+            if (process.env.DEBUG_MODE === 'true') {
+                this.logError(`Metric ping failed for ${kind}`, e.message);
+            }
         }
     }
 
@@ -830,7 +891,10 @@ class CTOInviteScraper {
         setInterval(() => {
             this.pingMetric('active');
         }, 30 * 60 * 1000);
-        this.logInfo('📡 Active heartbeat started (30m)');
+        
+        if (process.env.DEBUG_MODE === 'true') {
+            this.logInfo('📡 Active heartbeat started (30m)');
+        }
     }
 
     markAsInstalled() {
@@ -864,21 +928,20 @@ class CTOInviteScraper {
         const minutes = Math.floor((uptime % 3600) / 60);
         const seconds = uptime % 60;
         
-        console.log('\n' + '\x1b[96m' + '🟦'.repeat(15) + '\x1b[0m');
-        console.log('\x1b[96m📊 STATUS UPDATE\x1b[0m');
-        console.log(`⏰ Uptime: \x1b[92m${hours}h ${minutes}m ${seconds}s\x1b[0m`);
-        console.log(`🔢 Total processed: \x1b[94m${this.totalProcessed}\x1b[0m`);
-        console.log(`🎉 Successful: \x1b[92m${this.successCount}\x1b[0m`);
-        console.log(`⚠️  Already redeemed: \x1b[93m${this.alreadyRedeemedCount}\x1b[0m`);
-        console.log(`🔍 Invalid codes: \x1b[91m${this.invalidCount}\x1b[0m`);
-        console.log(`🔐 Auth errors: \x1b[91m${this.authErrorCount}\x1b[0m`);
-        console.log(`💾 Codes in memory: \x1b[90m${this.processedCodes.size}\x1b[0m`);
-        console.log(`🔄 Retry queue: \x1b[94m${this.retryQueue.length}\x1b[0m`);
-        console.log(`🏥 Token status: ${this.tokenValid ? '\x1b[92m✅ Valid\x1b[0m' : '\x1b[91m❌ Invalid\x1b[0m'}`);
+        console.log('\n┌──────────────── Status Update ────────────────┐');
+        console.log(`│  ⏰ Uptime: ${hours}h ${minutes}m ${seconds}s`);
+        console.log(`│  🔢 Processed: ${this.totalProcessed} | ✅ Success: \x1b[92m${this.successCount}\x1b[0m`);
+        console.log(`│  ⚠️  Redeemed: ${this.alreadyRedeemedCount} | ❌ Invalid: ${this.invalidCount}`);
         
+        // Only show retry queue if non-zero
+        if (this.retryQueue.length > 0 || this.authErrorCount > 0) {
+            console.log(`│  🔄 Retry queue: ${this.retryQueue.length} | 🔐 Auth errors: ${this.authErrorCount}`);
+        }
+        
+        const tokenStatus = this.tokenValid ? '\x1b[92m✅\x1b[0m' : '\x1b[91m❌\x1b[0m';
         const timeSinceTest = Math.floor((Date.now() - this.lastTokenTest) / 60000);
-        console.log(`🧪 Last token test: \x1b[90m${timeSinceTest}m ago\x1b[0m`);
-        console.log('\x1b[96m' + '🟦'.repeat(15) + '\x1b[0m\n');
+        console.log(`│  🏥 Token: ${tokenStatus} | 🧪 Last test: ${timeSinceTest}m ago`);
+        console.log('└────────────────────────────────────────────────┘\n');
     }
 
     async start() {
