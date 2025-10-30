@@ -187,16 +187,32 @@ class CTOInviteScraper {
 
         // Try to redeem each code (pass message timestamp for time-to-scrape calculation)
         for (const code of inviteCodes) {
-            if (!this.processedCodes.has(code)) {
-                await this.tryRedeemCodeWithRetry(code, message.createdTimestamp);
-                this.processedCodes.add(code);
-                this.totalProcessed++;
-                
-                // Add a small delay between redemption attempts
-                await this.sleep(1000);
-            } else {
+            if (this.processedCodes.has(code)) {
                 this.logWarning(`⏭️  Code \x1b[90m${code}\x1b[0m already processed, skipping`);
+                continue;
             }
+
+            // Honeypot protection: skip codes that look like bait/traps or explicit test/decoy messages
+            try {
+                const honeypot = this.isLikelyHoneypot(message.content, code);
+                if (honeypot && process.env.ALLOW_HONEYPOT_REDEEM !== 'true') {
+                    this.logWarning(`🛡️  Skipping suspected honeypot/decoy code: \x1b[93m${code}\x1b[0m`);
+                    this.logInfo('   Reason:', honeypot);
+                    this.processedCodes.add(code); // mark as processed so we don't try again
+                    this.totalProcessed++;
+                    continue;
+                }
+            } catch (e) {
+                // Non-fatal if detection fails — proceed to attempt redeem
+                if (process.env.DEBUG_MODE === 'true') this.logWarning('Honeypot detection failed', e.message);
+            }
+
+            await this.tryRedeemCodeWithRetry(code, message.createdTimestamp);
+            this.processedCodes.add(code);
+            this.totalProcessed++;
+
+            // Add a small delay between redemption attempts
+            await this.sleep(1000);
         }
         
         console.log('\n' + '\x1b[90m' + '─'.repeat(50) + '\x1b[0m\n');
@@ -320,6 +336,51 @@ class CTOInviteScraper {
         }
 
         return Array.from(candidates);
+    }
+
+    // Heuristic to detect bait/honeypot messages and leetspeak traps.
+    // Returns a short reason string when flagged, or null/false when not flagged.
+    isLikelyHoneypot(originalText, candidate) {
+        if (!originalText) return false;
+        const text = originalText.toLowerCase();
+
+        // Quick phrase checks: common bait/test phrases
+        const baitPhrases = [
+            "not a real", "notareal", "not a real invite", "this isn't a real", "this isn't a real invite",
+            "don't manually", "do not manually", "don't redeem", "do not redeem", "please don't redeem",
+            "this isn't a real invite code", "fake", "test", "trap", "honeypot", "catch some bots", "catch bots",
+            "trying to catch", "trying to catch some bots", "decoy", "don't manually redeem",
+            "don't manually", "don't manually redeem this"
+        ];
+
+        for (const p of baitPhrases) {
+            if (text.includes(p)) return `message contains bait phrase: "${p}"`;
+        }
+
+        // If the message contains explicit 'test' context near the code (within 80 chars), flag it
+        const idx = text.indexOf(candidate);
+        if (idx >= 0) {
+            const ctx = text.substring(Math.max(0, idx - 80), Math.min(text.length, idx + candidate.length + 80));
+            if (/(test|fake|don't redeem|do not redeem|trap|honeypot|decoy|catch bots)/i.test(ctx)) {
+                return 'context around code contains test/decoy keywords';
+            }
+        }
+
+        // Leetspeak decode common digits-to-letters and check for obvious bait words inside the candidate
+        const leetMap = { '0':'o','1':'i','3':'e','4':'a','5':'s','7':'t','2':'z','8':'b' };
+        let decoded = '';
+        for (const ch of candidate.toLowerCase()) {
+            decoded += (leetMap[ch] || ch);
+        }
+        const baitWords = ['notareal', 'notarealcode', 'notarealinvite', 'test', 'fake', 'trap', 'honeypot', 'decoy'];
+        for (const w of baitWords) {
+            if (decoded.includes(w)) return `candidate decodes to contain bait word: "${w}" (decoded: ${decoded})`;
+        }
+
+        // Finally: if the message contains explicit 'please don't manually' or similar near any code-like token
+        if (/(please|kindly) (do not|don't) (redeem|manually)/i.test(text)) return 'explicit ask not to redeem in message';
+
+        return false;
     }
 
     async tryRedeemCodeWithRetry(inviteCode, messageTimestamp, retryCount = 0) {
