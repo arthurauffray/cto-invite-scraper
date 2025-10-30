@@ -35,7 +35,13 @@ npm install
 5. Look for the request to `api.enginelabs.ai/invites/redeem`
 6. Copy the `Bearer` token from the `Authorization` header
 
-**Note:** The bot automatically refreshes this token every 30 seconds using Clerk's session management API, so you don't need to worry about it expiring!
+**Optional: Enable Auto-Refresh (Recommended)**
+To keep the token fresh automatically:
+1. In DevTools, go to `Application` tab → `Cookies` → `https://cto.new`
+2. Find the `__client` cookie and copy its value
+3. Add to your `.env`: `CLERK_CLIENT_COOKIE=<value>`
+
+Without this, the token expires after ~60 seconds. With it, the bot refreshes automatically every 15 seconds!
 
 ### 5. Configure Environment Variables
 Create a `.env` file in the project root (copy from `.env.example`):

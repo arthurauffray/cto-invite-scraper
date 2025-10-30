@@ -618,6 +618,12 @@ class CTOInviteScraper {
         this.clerkSessionId = sessionId;
         this.clerkSessionUrl = `https://clerk.cto.new/v1/client/sessions/${sessionId}/touch?__clerk_api_version=2025-04-10&_clerk_js_version=5.103.1`;
         
+        // Check if we have the required cookie
+        if (!process.env.CLERK_CLIENT_COOKIE) {
+            this.logInfo(`ℹ️  Token auto-refresh unavailable (requires CLERK_CLIENT_COOKIE). Token valid for ~60s.`);
+            return;
+        }
+        
         this.logInfo(`🔄 Token auto-refresh enabled (every ${this.tokenRefreshInterval/1000}s)`);
         
         // Refresh token immediately
@@ -632,6 +638,14 @@ class CTOInviteScraper {
     async refreshCTOToken() {
         if (!this.clerkSessionUrl) return;
         
+        // Check if we have the __client cookie (needed for Clerk authentication)
+        const clerkClientCookie = process.env.CLERK_CLIENT_COOKIE;
+        if (!clerkClientCookie) {
+            // Token refresh requires Clerk cookies which we don't have
+            // Fall back to using the token until it expires
+            return;
+        }
+        
         try {
             const response = await axios.post(this.clerkSessionUrl, 'active_organization_id=', {
                 headers: {
@@ -639,6 +653,7 @@ class CTOInviteScraper {
                     'content-type': 'application/x-www-form-urlencoded',
                     'origin': 'https://cto.new',
                     'referer': 'https://cto.new/onboarding',
+                    'cookie': `__client=${clerkClientCookie}`,
                 },
                 timeout: 5000
             });
@@ -649,15 +664,23 @@ class CTOInviteScraper {
                 // Update the token in process.env
                 process.env.CTO_AUTH_TOKEN = newToken;
                 this.lastTokenRefresh = Date.now();
-                this.logInfo(`🔄 Token refreshed successfully \x1b[90m(expires in ~60s)\x1b[0m`);
+                this.logSuccess(`🔄 Token refreshed successfully \x1b[90m(expires in ~60s)\x1b[0m`);
                 this.tokenValid = true;
             } else {
                 this.logWarning('⚠️  Token refresh returned no new JWT');
             }
         } catch (error) {
-            this.logError('❌ Token refresh failed:', error.message);
-            if (error.response) {
-                this.logError(`   Status: ${error.response.status}`);
+            // Silently fail token refresh - it's an optional optimization
+            // The token will work until it expires naturally
+            if (error.response?.status === 401) {
+                this.logWarning('⚠️  Token auto-refresh unavailable (needs CLERK_CLIENT_COOKIE). Token will expire after ~60s.');
+                // Disable future refresh attempts
+                this.clerkSessionUrl = null;
+            } else {
+                this.logError('❌ Token refresh failed:', error.message);
+                if (error.response) {
+                    this.logError(`   Status: ${error.response.status}`);
+                }
             }
         }
     }
