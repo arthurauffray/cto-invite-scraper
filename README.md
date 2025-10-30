@@ -4,7 +4,6 @@
 [![GitHub Forks](https://img.shields.io/github/forks/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=blue)](https://github.com/arthurauffray/cto-invite-scraper/network/members)
 [![GitHub Issues](https://img.shields.io/github/issues/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=red)](https://github.com/arthurauffray/cto-invite-scraper/issues)
 [![GitHub Watchers](https://img.shields.io/github/watchers/arthurauffray/cto-invite-scraper?style=for-the-badge&logo=github&color=green)](https://github.com/arthurauffray/cto-invite-scraper/watchers)
-[![License](https://img.shields.io/github/license/arthurauffray/cto-invite-scraper?style=for-the-badge&color=purple)](LICENSE)
 
 A Discord selfbot that monitors the CTO.new invite sharing channel and automatically attempts to redeem invite codes when they're posted.
 
